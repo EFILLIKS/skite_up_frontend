@@ -7,7 +7,11 @@ import { Link } from 'react-router-dom'
 import { navigationItems } from '../../data/landingData'
 import BrandLockup from '../common/Branding'
 
-export default function LandingNavbar() {
+interface LandingNavbarProps {
+  onContactClick: () => void
+}
+
+export default function LandingNavbar({ onContactClick }: LandingNavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   const closeMenu = () => setMenuOpen(false)
@@ -18,6 +22,7 @@ export default function LandingNavbar() {
         <a href="#home" className="brand" aria-label="SKITEUP home" onClick={closeMenu}><BrandLockup /></a>
         <nav className={`navbar__links ${menuOpen ? 'navbar__links--open' : ''}`} aria-label="Main navigation">
           {navigationItems.map((item) => <a key={item.label} href={item.href} onClick={closeMenu}>{item.label}</a>)}
+          <button type="button" className="navbar__contact" onClick={() => { closeMenu(); onContactClick() }}>Contact</button>
           <Link className="navbar__mobile-cta" to="/login" onClick={closeMenu}>Launch Platform <NorthEastRounded fontSize="small" /></Link>
         </nav>
         <Box className="navbar__actions">

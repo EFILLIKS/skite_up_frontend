@@ -9,7 +9,11 @@ import ProductVisual from '../common/ProductVisual'
 import { BrandMark } from '../common/Branding'
 import { heroEcosystemModules, heroProductSlides, heroStats } from '../../data/landingData'
 
-export default function HeroSection() {
+interface HeroSectionProps {
+  onContactClick: () => void
+}
+
+export default function HeroSection({ onContactClick }: HeroSectionProps) {
   return (
     <SectionContainer id="home" className="hero-section">
       <Box className="hero-layout">
@@ -19,7 +23,7 @@ export default function HeroSection() {
           <Typography className="hero-description">One intelligent platform connecting learning, assessments, coding, LSRW evaluation, analytics and placement readiness.</Typography>
           <Box className="hero-actions">
             <AppButton href="#platform" endIcon={<ArrowForwardRounded />}>Explore SkiteUp</AppButton>
-            <a href="mailto:info@efilliks.com" className="hero-secondary-link">Contact us <ArrowForwardRounded fontSize="small" /></a>
+            <button type="button" onClick={onContactClick} className="hero-secondary-link">Contact us <ArrowForwardRounded fontSize="small" /></button>
           </Box>
           <Box className="hero-proof"><span className="avatar-stack"><i>R</i><i>A</i><i>M</i><i>+</i></span><span><b>Built for every learner</b><small>One connected academic experience</small></span></Box>
         </Box>
