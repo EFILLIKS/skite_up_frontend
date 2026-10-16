@@ -23,21 +23,17 @@ import {
   FirstPage as FirstPageIcon,
   LastPage as LastPageIcon,
   Refresh as RefreshIcon,
-  CheckCircle as CheckCircleIcon,
   AssignmentTurnedIn as AssignmentTurnedInIcon,
 } from "@mui/icons-material";
 
 import Card from "../../components/common/Card";
-import Dialog from "../../components/common/Dialog";
 import AppSkeleton from "../../components/common/Skeleton";
 
 import {
   useGetStudentAssessmentsQuery,
-  useLazyGetAssessmentResultQuery,
 } from "../../features/assessment/AssessmentApi";
 import type {
   StudentAssessmentItem,
-  StudentTestResultData,
 } from "../../types/Assessment.types";
 
 export const StudentResultPage: React.FC = () => {
@@ -49,15 +45,6 @@ export const StudentResultPage: React.FC = () => {
   const [page, setPage] = useState<number>(0);
   const pageSize = 10;
   const [jumpPage, setJumpPage] = useState<string>("1");
-
-  const [selectedAssessment, setSelectedAssessment] =
-    useState<StudentAssessmentItem | null>(null);
-  const [resultModalOpen, setResultModalOpen] = useState<boolean>(false);
-  const [detailedResultData, setDetailedResultData] =
-    useState<StudentTestResultData | null>(null);
-
-  const [triggerGetResult, { isLoading: isFetchingDetailedResult }] =
-    useLazyGetAssessmentResultQuery();
 
   const {
     data: responseData,
@@ -279,7 +266,7 @@ export const StudentResultPage: React.FC = () => {
             onClose={() => setDateAnchorEl(null)}
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
-            PaperProps={{ sx: { p: 2, width: 260, borderRadius: "10px", mt: 1 } }}
+            slotProps={{ paper: { sx: { p: 2, width: 260, borderRadius: "10px", mt: 1 } } }}
           >
             <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#101828", mb: 1.5 }}>
               Filter by Date
@@ -290,7 +277,7 @@ export const StudentResultPage: React.FC = () => {
               fullWidth
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              InputLabelProps={{ shrink: true }}
+              slotProps={{ inputLabel: { shrink: true } }}
               sx={{ mb: 2 }}
             />
             <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
@@ -593,153 +580,9 @@ export const StudentResultPage: React.FC = () => {
           </Box>
         </Box>
       )}
-
-      <Dialog
-        open={resultModalOpen}
-        onClose={() => setResultModalOpen(false)}
-        title={selectedAssessment?.title || "Assessment Result"}
-        maxWidth="md"
-        actions={
-          <Button
-            variant="contained"
-            onClick={() => setResultModalOpen(false)}
-            sx={{ bgcolor: "#2563eb", textTransform: "none", borderRadius: "6px" }}
-          >
-            Close
-          </Button>
-        }
-      >
-        {isFetchingDetailedResult ? (
-          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", py: 5, gap: 1.5 }}>
-            <CircularProgress size={36} sx={{ color: "#2563eb" }} />
-            <Typography sx={{ fontSize: "13px", color: "#64748b" }}>Loading detailed score breakdown...</Typography>
-          </Box>
-        ) : (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5, py: 1 }}>
-            <Box
-              sx={{
-                p: 2.5,
-                borderRadius: "12px",
-                bgcolor: "#f0fdf4",
-                border: "1px solid #bbf7d0",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                flexWrap: "wrap",
-                gap: 2,
-              }}
-            >
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <CheckCircleIcon sx={{ fontSize: 32, color: "#16a34a" }} />
-                <Box>
-                  <Typography sx={{ fontSize: "16px", fontWeight: 700, color: "#166534" }}>
-                    Test Completed & Graded
-                  </Typography>
-                  <Typography sx={{ fontSize: "12.5px", color: "#15803d" }}>
-                    {selectedAssessment?.timeDisplay || "Evaluated by SkiteUp Assessment Engine"}
-                  </Typography>
-                </Box>
-              </Box>
-
-              <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-                <Typography sx={{ fontSize: "13px", color: "#166534", fontWeight: 600 }}>Score:</Typography>
-                <Typography sx={{ fontSize: "22px", fontWeight: 800, color: "#15803d" }}>
-                  {detailedResultData?.score !== undefined
-                    ? Number(detailedResultData.score).toFixed(2)
-                    : selectedAssessment?.score !== undefined && selectedAssessment?.score !== null
-                    ? Number(selectedAssessment.score).toFixed(2)
-                    : "116.00"}
-                  <Typography component="span" sx={{ fontSize: "14px", color: "#4ade80", ml: 0.5 }}>
-                    / {detailedResultData?.totalMarks !== undefined ? Number(detailedResultData.totalMarks).toFixed(2) : "135.00"}
-                  </Typography>
-                </Typography>
-              </Box>
-            </Box>
-
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)" }, gap: 1.5 }}>
-              <Box sx={{ p: 2, borderRadius: "8px", border: "1px solid #eaecf0", bgcolor: "#f8fafc" }}>
-                <Typography sx={{ fontSize: "11.5px", color: "#64748b", fontWeight: 500 }}>Percentage</Typography>
-                <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#16a34a", mt: 0.5 }}>
-                  {detailedResultData?.percentage !== undefined
-                    ? `${Number(detailedResultData.percentage).toFixed(1)}%`
-                    : selectedAssessment?.percentage !== undefined && selectedAssessment?.percentage !== null
-                    ? `${Number(selectedAssessment.percentage).toFixed(1)}%`
-                    : "85.9%"}
-                </Typography>
-              </Box>
-
-              <Box sx={{ p: 2, borderRadius: "8px", border: "1px solid #eaecf0", bgcolor: "#f8fafc" }}>
-                <Typography sx={{ fontSize: "11.5px", color: "#64748b", fontWeight: 500 }}>Accuracy</Typography>
-                <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#0284c7", mt: 0.5 }}>
-                  {detailedResultData?.accuracyPercentage !== undefined
-                    ? `${Number(detailedResultData.accuracyPercentage).toFixed(1)}%`
-                    : "80.0%"}
-                </Typography>
-              </Box>
-
-              <Box sx={{ p: 2, borderRadius: "8px", border: "1px solid #eaecf0", bgcolor: "#f8fafc" }}>
-                <Typography sx={{ fontSize: "11.5px", color: "#64748b", fontWeight: 500 }}>Total Questions</Typography>
-                <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#101828", mt: 0.5 }}>
-                  {selectedAssessment?.totalQuestions || detailedResultData?.totalQuestions || 11}
-                </Typography>
-              </Box>
-
-              <Box sx={{ p: 2, borderRadius: "8px", border: "1px solid #eaecf0", bgcolor: "#f8fafc" }}>
-                <Typography sx={{ fontSize: "11.5px", color: "#64748b", fontWeight: 500 }}>Duration</Typography>
-                <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#101828", mt: 0.5 }}>
-                  {selectedAssessment?.durationMinutes || 8} mins
-                </Typography>
-              </Box>
-            </Box>
-
-            {detailedResultData?.sectionBreakdowns && detailedResultData.sectionBreakdowns.length > 0 && (
-              <Box sx={{ mt: 1 }}>
-                <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#101828", mb: 1.5 }}>
-                  Section Breakdown
-                </Typography>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 1.5 }}>
-                  {detailedResultData.sectionBreakdowns.map((sec, sIdx) => (
-                    <Box
-                      key={sec.sectionName || sIdx}
-                      sx={{
-                        p: 2,
-                        borderRadius: "8px",
-                        border: "1px solid #eaecf0",
-                        bgcolor: "#ffffff",
-                      }}
-                    >
-                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-                        <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>
-                          {sec.sectionName}
-                        </Typography>
-                        <Chip
-                          size="small"
-                          label={`${Number(sec.percentage).toFixed(0)}%`}
-                          sx={{
-                            bgcolor: Number(sec.percentage) >= 70 ? "#ecfdf3" : "#fff7ed",
-                            color: Number(sec.percentage) >= 70 ? "#16a34a" : "#ea580c",
-                            fontWeight: 700,
-                            fontSize: "10.5px",
-                            height: 20,
-                          }}
-                        />
-                      </Box>
-                      <Typography sx={{ fontSize: "12px", color: "#64748b" }}>
-                        Score: <strong>{Number(sec.score).toFixed(2)}</strong> / {Number(sec.totalMarks).toFixed(2)}
-                      </Typography>
-                      <Typography sx={{ fontSize: "11.5px", color: "#94a3b8", mt: 0.5 }}>
-                        Correct: {sec.correctQuestions} / {sec.totalQuestions}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            )}
-          </Box>
-        )}
-      </Dialog>
     </Box>
   );
 };
+
 
 export default StudentResultPage;

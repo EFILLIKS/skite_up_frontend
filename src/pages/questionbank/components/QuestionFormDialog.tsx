@@ -229,7 +229,7 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
               Save Changes
             </Button>
           ) : (
-            <Stack direction="row" spacing={1.5} alignItems="center">
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
               <Button
                 variant="outlined"
                 onClick={onPrev}

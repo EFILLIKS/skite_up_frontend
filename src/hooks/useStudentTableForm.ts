@@ -55,9 +55,7 @@ export const useStudentTableForm = () => {
     control,
     register,
     handleSubmit,
-    setValue,
     getValues,
-    reset,
     clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<StudentTableFormData>({
@@ -112,12 +110,12 @@ export const useStudentTableForm = () => {
   };
 
   const handleAddRow = () => {
-    append(createEmptyStudentRow(institutionType));
+    append(createEmptyStudentRow(institutionType) as any);
   };
 
   const handleRemoveRow = (index: number) => {
     if (fields.length === 1) {
-      replace([createEmptyStudentRow(institutionType)]);
+      replace([createEmptyStudentRow(institutionType) as any]);
       clearErrors();
       return;
     }
@@ -127,9 +125,9 @@ export const useStudentTableForm = () => {
 
   const handleClear = () => {
     replace([
-      createEmptyStudentRow(institutionType),
-      createEmptyStudentRow(institutionType),
-      createEmptyStudentRow(institutionType),
+      createEmptyStudentRow(institutionType) as any,
+      createEmptyStudentRow(institutionType) as any,
+      createEmptyStudentRow(institutionType) as any,
     ]);
     clearErrors();
     setSelectedFile(null);
@@ -173,7 +171,7 @@ export const useStudentTableForm = () => {
         return;
       }
 
-      replace(parsedStudents);
+      replace(parsedStudents as any);
       clearErrors();
 
       setSnackbar({

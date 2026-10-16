@@ -259,6 +259,10 @@ export interface AssessmentQuestionItem {
   sectionKey?: "MCQ" | "LSRW" | "CODING" | string;
   sectionType?: "MCQ" | "LSRW" | "CODING" | string;
   subSkill?: "Listening" | "Speaking" | "Reading" | "Writing" | string;
+  skill?: string;
+  questionType?: string;
+  category?: string;
+  lsrwSubType?: string;
   subSkillIcon?: string;
   questionText: string;
   imageUrl?: string | null;

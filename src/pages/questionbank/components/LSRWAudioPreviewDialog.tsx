@@ -220,12 +220,14 @@ const LSRWAudioPreviewDialog: React.FC<LSRWAudioPreviewDialogProps> = ({
       onClose={onClose}
       fullWidth
       maxWidth="xs"
-      PaperProps={{
-        sx: {
-          borderRadius: "16px",
-          p: 0,
-          boxShadow: "0 24px 50px rgba(16, 24, 40, 0.22)",
-          overflow: "hidden",
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: "16px",
+            p: 0,
+            boxShadow: "0 24px 50px rgba(16, 24, 40, 0.22)",
+            overflow: "hidden",
+          },
         },
       }}
     >

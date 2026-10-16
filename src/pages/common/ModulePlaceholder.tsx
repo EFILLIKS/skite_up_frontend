@@ -10,10 +10,10 @@ export const ModulePlaceholder: React.FC<ModulePlaceholderProps> = ({ title, sub
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={700} color="#1d2939">
+        <Typography variant="h5" sx={{ fontWeight: 700, color: "#1d2939" }}>
           {title}
         </Typography>
-        <Typography variant="body2" color="#667085" mt={0.5}>
+        <Typography variant="body2" sx={{ color: "#667085", mt: 0.5 }}>
           {subtitle}
         </Typography>
       </Box>
@@ -28,10 +28,10 @@ export const ModulePlaceholder: React.FC<ModulePlaceholderProps> = ({ title, sub
           bgcolor: "#ffffff",
         }}
       >
-        <Typography variant="h6" fontWeight={600} color="#344054">
+        <Typography variant="h6" sx={{ fontWeight: 600, color: "#344054" }}>
           {title} Module
         </Typography>
-        <Typography variant="body2" color="text.secondary" mt={1}>
+        <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
           This section is currently being configured for teachers.
         </Typography>
       </Paper>

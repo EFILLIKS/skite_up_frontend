@@ -378,15 +378,17 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
           vertical: "top",
           horizontal: "left",
         }}
-        PaperProps={{
-          sx: {
-            mt: 1,
-            p: 2,
-            borderRadius: "12px",
-            boxShadow: "0 10px 25px rgba(16, 24, 40, 0.12)",
-            border: "1px solid #eaecf0",
-            width: 320,
-            bgcolor: "#ffffff",
+        slotProps={{
+          paper: {
+            sx: {
+              mt: 1,
+              p: 2,
+              borderRadius: "12px",
+              boxShadow: "0 10px 25px rgba(16, 24, 40, 0.12)",
+              border: "1px solid #eaecf0",
+              width: 320,
+              bgcolor: "#ffffff",
+            },
           },
         }}
       >

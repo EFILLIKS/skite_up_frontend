@@ -88,12 +88,14 @@ const LSRWFormDialog: React.FC<LSRWFormDialogProps> = ({
       onClose={onClose}
       fullWidth
       maxWidth="md"
-      PaperProps={{
-        sx: {
-          borderRadius: "14px",
-          p: 0,
-          boxShadow: "0 20px 48px rgba(16, 24, 40, 0.18)",
-          overflow: "hidden",
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: "14px",
+            p: 0,
+            boxShadow: "0 20px 48px rgba(16, 24, 40, 0.18)",
+            overflow: "hidden",
+          },
         },
       }}
     >

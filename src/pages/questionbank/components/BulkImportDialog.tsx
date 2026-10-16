@@ -280,7 +280,7 @@ export const BulkImportDialog: React.FC<BulkImportDialogProps> = ({
             </Typography>
           </Box>
 
-          <Stack direction="row" spacing={1.5} flexWrap="wrap">
+          <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap" }}>
             <Button
               variant="outlined"
               size="small"

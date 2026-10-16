@@ -17,8 +17,6 @@ import {
   type QuestionFormData,
 } from "../utils/QuestionBankSchema";
 import {
-  parseCSV,
-  convertCSVRowsToQuestions,
   parseImportFile,
   toQuestionFormData,
   type ParsedQuestionRow,
@@ -27,7 +25,6 @@ import type { SnackbarState } from "../types/Snackbar.types";
 import type {
   QuestionBankItem,
   QuestionBankRequestDto,
-  CategorySkill,
   DomainCategoryData,
   SkillTreeNode,
   TopicTreeNode,
@@ -1012,7 +1009,9 @@ export const useQuestionBank = () => {
     mcqLimit,
     usedCount,
     selectedSkill,
+    setSelectedSkill,
     selectedTopic,
+    setSelectedTopic,
     expandedSkills,
     toggleSkillAccordion,
     handleSelectSkill,

@@ -27,7 +27,6 @@ import {
   ModeEditOutlineOutlined as ModeEditOutlineOutlinedIcon,
   DeleteOutlineOutlined as DeleteOutlineOutlinedIcon,
   Close as CloseIcon,
-  Refresh as RefreshIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
@@ -1092,8 +1091,10 @@ export const TeacherDashBoard: React.FC = () => {
         open={Boolean(deletingId)}
         onClose={() => setDeletingId(null)}
         maxWidth="xs"
-        PaperProps={{
-          sx: { borderRadius: "14px", p: 1 },
+        slotProps={{
+          paper: {
+            sx: { borderRadius: "14px", p: 1 },
+          },
         }}
       >
         <DialogTitle sx={{ fontWeight: 700, fontSize: "18px", color: "#101828" }}>

@@ -38,7 +38,6 @@ const CollegeForm = () => {
     onSubmit,
     handleClear,
     watch,
-    setValue,
     errors,
     snackbar,
     handleCloseSnackbar,

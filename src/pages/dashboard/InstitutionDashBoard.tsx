@@ -8,7 +8,6 @@ import {
     Menu,
     MenuItem,
     CircularProgress,
-    Alert,
     Chip,
     InputAdornment,
     Tooltip,
@@ -889,19 +888,21 @@ const InstitutionDashBoard = () => {
                                     height: 36,
                                 },
                             }}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <SearchIcon sx={{ fontSize: 18, color: "#98a2b3" }} />
-                                    </InputAdornment>
-                                ),
-                                endAdornment: searchTerm ? (
-                                    <InputAdornment position="end">
-                                        <IconButton size="small" onClick={() => setSearchTerm("")}>
-                                            <ClearIcon sx={{ fontSize: 16 }} />
-                                        </IconButton>
-                                    </InputAdornment>
-                                ) : null,
+                            slotProps={{
+                                input: {
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <SearchIcon sx={{ fontSize: 18, color: "#98a2b3" }} />
+                                        </InputAdornment>
+                                    ),
+                                    endAdornment: searchTerm ? (
+                                        <InputAdornment position="end">
+                                            <IconButton size="small" onClick={() => setSearchTerm("")}>
+                                                <ClearIcon sx={{ fontSize: 16 }} />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ) : null,
+                                },
                             }}
                         />
 

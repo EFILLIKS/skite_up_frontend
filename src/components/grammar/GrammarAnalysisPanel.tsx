@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Typography, CircularProgress, Button, Alert } from "@mui/material";
-import { Refresh as RefreshIcon, AutoFixHigh as AutoFixHighIcon } from "@mui/icons-material";
+import { Refresh as RefreshIcon } from "@mui/icons-material";
 import type { GrammarCheckResponse } from "../../types/Grammar.types";
 import GrammarScoreCard from "./GrammarScoreCard";
 import GrammarErrorHighlighter from "./GrammarErrorHighlighter";

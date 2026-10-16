@@ -7,7 +7,6 @@ import {
   Box,
   Typography,
   IconButton,
-  TextField,
   CircularProgress,
   Chip,
   Alert,
@@ -104,11 +103,13 @@ export const AssessmentReassignModal: React.FC<AssessmentReassignModalProps> = (
       onClose={isSubmitting ? undefined : onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: "14px",
-          boxShadow: "0 20px 40px rgba(16, 24, 40, 0.15)",
-          overflow: "hidden",
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: "14px",
+            boxShadow: "0 20px 40px rgba(16, 24, 40, 0.15)",
+            overflow: "hidden",
+          },
         },
       }}
     >

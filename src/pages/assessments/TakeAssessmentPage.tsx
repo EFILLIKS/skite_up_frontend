@@ -31,7 +31,6 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   GraphicEq as GraphicEqIcon,
-  Replay as ReplayIcon,
   LockOutlined as LockOutlinedIcon,
 } from "@mui/icons-material";
 import Editor from "@monaco-editor/react";
@@ -137,7 +136,7 @@ export const TakeAssessmentPage: React.FC = () => {
   const [audioPromptError, setAudioPromptError] = useState<boolean>(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState<boolean>(false);
   const [recordingSecondsLeft, setRecordingSecondsLeft] = useState<number>(15);
-  const voiceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -162,7 +161,6 @@ export const TakeAssessmentPage: React.FC = () => {
   const [isUploadingAudio, setIsUploadingAudio] = useState<boolean>(false);
 
   const [runsRemaining, setRunsRemaining] = useState<number>(3);
-  const [codeTestResults, setCodeTestResults] = useState<RunCodeTestCaseResult[]>([]);
   const [normalizedTestResults, setNormalizedTestResults] = useState<
     Array<{
       testCaseNumber: number;
@@ -210,7 +208,6 @@ export const TakeAssessmentPage: React.FC = () => {
 
   const [violationDialogOpen, setViolationDialogOpen] = useState<boolean>(false);
   const [violationReason, setViolationReason] = useState<string>("");
-  const [violationKey, setViolationKey] = useState<string>("");
   const [violationCount, setViolationCount] = useState<number>(0);
 
   const [snackbar, setSnackbar] = useState<SnackbarState>({
@@ -235,7 +232,7 @@ export const TakeAssessmentPage: React.FC = () => {
   const [uploadAudioTrigger] = useUploadQuestionBankAudioMutation();
   const [checkGrammarTrigger] = useCheckGrammarMutation();
 
-  const [analyzingGrammarMap, setAnalyzingGrammarMap] = useState<Record<string, boolean>>({});
+  const [, setAnalyzingGrammarMap] = useState<Record<string, boolean>>({});
   const pendingGrammarCallsRef = useRef<Set<string>>(new Set());
 
   const runGrammarAnalysis = async (
@@ -480,7 +477,6 @@ export const TakeAssessmentPage: React.FC = () => {
       if (currentQuestion.runsRemaining !== undefined) {
         setRunsRemaining(currentQuestion.runsRemaining);
       }
-      setCodeTestResults([]);
       setNormalizedTestResults([]);
       setSelectedTestCaseIndex(0);
       setDiagnosticTerminalOutput("");
@@ -575,7 +571,6 @@ export const TakeAssessmentPage: React.FC = () => {
 
   const triggerViolation = (type: string, description: string, keyVal?: string) => {
     setViolationReason(description);
-    setViolationKey(keyVal || "");
     setViolationDialogOpen(true);
     setViolationCount((prev) => prev + 1);
 
@@ -930,7 +925,7 @@ export const TakeAssessmentPage: React.FC = () => {
       const isReading =
         Boolean(currentQuestion?.readableParagraph) ||
         currentQuestion?.subSkill?.toLowerCase() === "reading" ||
-        currentQuestion?.skill?.toLowerCase() === "reading" ||
+        (currentQuestion as any)?.skill?.toLowerCase() === "reading" ||
         (currentQuestion as any)?.lsrwSubType?.toLowerCase() === "reading" ||
         (currentQuestion as any)?.sectionType?.toLowerCase() === "reading" ||
         (currentQuestion as any)?.category?.toLowerCase() === "reading";
@@ -1399,14 +1394,6 @@ export const TakeAssessmentPage: React.FC = () => {
     }
 
     setCurrentQuestionIndex(targetIndex);
-  };
-
-  const handlePersistResponse = async (
-    action: "SAVE" | "SKIP" | "FLAG",
-    nextIndexOffset = 0
-  ) => {
-    const nextIdx = currentQuestionIndex + nextIndexOffset;
-    navigateToQuestion(nextIdx, action);
   };
 
   const getQuestionAudioKey = (q?: AssessmentQuestionItem, idx?: number) => {
@@ -3029,7 +3016,7 @@ export const TakeAssessmentPage: React.FC = () => {
                                 </Box>
                               ) : currentQuestion.subSkill?.toLowerCase() === "speaking" ||
                                 currentQuestion.subSkill?.toLowerCase() === "reading" ||
-                                (currentQuestion.questionType && currentQuestion.questionType.toLowerCase().includes("voice")) ? (
+                                ((currentQuestion as any).questionType && (currentQuestion as any).questionType.toLowerCase().includes("voice")) ? (
                                 <Box sx={{ textAlign: "center", py: 3, mb: 3 }}>
                                   <Box sx={{ position: "relative", display: "inline-block", mb: 2 }}>
                                     <IconButton

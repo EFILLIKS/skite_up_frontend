@@ -50,6 +50,9 @@ export interface StudentPageData {
   isLimitReached?: boolean;
   activeCount?: number;
   inactiveCount?: number;
+  batchList?: string[];
+  departmentList?: string[];
+  institutionName?: string;
 }
 
 export interface StudentsApiResponse {

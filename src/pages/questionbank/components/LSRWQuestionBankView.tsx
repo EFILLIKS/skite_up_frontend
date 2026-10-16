@@ -30,7 +30,6 @@ import Input from "../../../components/common/Input";
 import Table from "../../../components/common/Table";
 import Pagination from "../../../components/common/Pagination";
 import Snackbar from "../../../components/common/Snackbar";
-import Skeleton from "../../../components/common/Skeleton";
 import { useLSRWQuestionBank } from "../../../hooks/useLSRWQuestionBank";
 import type { LSRWSubTab, AnyLSRWExerciseItem, ListeningExerciseItem } from "../../../types/LSRW.types";
 import type { AppTableColumn } from "../../../types/Table.types";
@@ -56,9 +55,7 @@ const LSRWQuestionBankView: React.FC = () => {
     setRowsPerPage,
     totalCount,
     lsrwLimit,
-    remainingLimit,
     paginatedList,
-    filteredList,
     isApiFetching,
 
     isFormDialogOpen,
@@ -89,17 +86,9 @@ const LSRWQuestionBankView: React.FC = () => {
     handleCloseAudioPreview,
     currentPlayingExerciseId,
     isPlayingAudio,
-    activeAudioExercise,
     audioCurrentTime,
     audioDuration,
-    audioVolume,
-    isAudioMuted,
     handleTogglePlayInline,
-    handleStopAudio,
-    handleSeekAudio,
-    handleSkipAudio,
-    handleSetVolume,
-    handleToggleMute,
 
     isBulkImportOpen,
     handleOpenBulkImport,
@@ -600,12 +589,14 @@ const LSRWQuestionBankView: React.FC = () => {
               value: searchTerm,
               onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value),
               size: "small",
-              InputProps: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchRoundedIcon sx={{ color: "#667085", fontSize: 20 }} />
-                  </InputAdornment>
-                ),
+              slotProps: {
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchRoundedIcon sx={{ color: "#667085", fontSize: 20 }} />
+                    </InputAdornment>
+                  ),
+                },
               },
               sx: {
                 bgcolor: "#ffffff",

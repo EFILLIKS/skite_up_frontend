@@ -42,7 +42,6 @@ const CodingQuestionBankView: React.FC = () => {
     totalCount,
     codingLimit,
     paginatedProblems,
-    filteredProblems,
     isApiFetching,
 
     isFormDialogOpen,
@@ -288,12 +287,14 @@ const CodingQuestionBankView: React.FC = () => {
               value: searchTerm,
               onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value),
               size: "small",
-              InputProps: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchRoundedIcon sx={{ color: "#667085", fontSize: 20 }} />
-                  </InputAdornment>
-                ),
+              slotProps: {
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchRoundedIcon sx={{ color: "#667085", fontSize: 20 }} />
+                    </InputAdornment>
+                  ),
+                },
               },
               sx: {
                 bgcolor: "#ffffff",

@@ -27,6 +27,7 @@ import Card from "../../components/common/Card";
 import Dialog from "../../components/common/Dialog";
 import Snackbar from "../../components/common/Snackbar";
 import useStudentTableForm from "../../hooks/useStudentTableForm";
+import type { InstitutionType } from "../../types/Student.types";
 const getFieldError = (errorObj?: { message?: string }, value?: string) => {
     if (!errorObj) return { hasError: false, message: undefined };
     if (errorObj.message?.toLowerCase().includes("required") && value && value.trim() !== "") {

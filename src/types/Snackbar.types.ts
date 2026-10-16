@@ -7,7 +7,7 @@ export interface SnackSnackbarMUI
   onClose: () => void;
 }
 export type SnackbarState = {
-    open: boolean;
-    message: string;
-    severity: "success" | "error";
-};
+  open: boolean;
+  message: string;
+  severity: AlertColor;
+};

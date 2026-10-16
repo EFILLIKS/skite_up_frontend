@@ -4,7 +4,6 @@ import { resolveAudioUrl } from "../utils/audioUtils";
 import type {
   LSRWSubTab,
   LSRWLevel,
-  LSRWStatus,
   AnyLSRWExerciseItem,
   ListeningExerciseItem,
   SpeakingExerciseItem,

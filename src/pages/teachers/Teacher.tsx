@@ -521,12 +521,14 @@ const Teacher = () => {
                                 setSearchTerm(e.target.value);
                                 setPage(0);
                             }}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <SearchOutlined sx={{ color: "#98a2b3", fontSize: 19 }} />
-                                    </InputAdornment>
-                                ),
+                            slotProps={{
+                                input: {
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <SearchOutlined sx={{ color: "#98a2b3", fontSize: 19 }} />
+                                        </InputAdornment>
+                                    ),
+                                },
                             }}
                             sx={{
                                 width: { xs: "100%", sm: 280 },
@@ -711,7 +713,7 @@ const Teacher = () => {
 
             <Dialog
                 open={Boolean(teacherToDelete)}
-                onClose={isDeleting ? undefined : handleCloseDeleteConfirm}
+                onClose={isDeleting ? () => {} : handleCloseDeleteConfirm}
                 title="Delete Faculty Member"
                 description={
                     teacherToDelete

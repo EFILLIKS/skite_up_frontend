@@ -36,7 +36,6 @@ import {
 import type { StudentItem } from "../../types/Student.types";
 import type { AppTableColumn } from "../../types/Table.types";
 import type { SnackbarState } from "../../types/Snackbar.types";
-import info from "../../../src/assets/Feedback.svg";
 
 const statusBadgeStyles: Record<string, { bg: string; color: string; dot: string }> = {
     Active: { bg: "#ecfdf3", color: "#16a34a", dot: "#16a34a" },
@@ -96,7 +95,7 @@ const Students = () => {
     const [selectedDept, setSelectedDept] = useState("");
 
     const [page, setPage] = useState(0);
-    const [pageSize, setPageSize] = useState(10);
+    const [pageSize] = useState(10);
     const [pageInput, setPageInput] = useState("1");
 
     const [studentToDelete, setStudentToDelete] = useState<StudentItem | null>(null);
@@ -539,12 +538,14 @@ const Students = () => {
                             setSearchTerm(e.target.value);
                             setPage(0);
                         }}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchOutlined sx={{ color: "#98a2b3", fontSize: 19 }} />
-                                </InputAdornment>
-                            ),
+                        slotProps={{
+                            input: {
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <SearchOutlined sx={{ color: "#98a2b3", fontSize: 19 }} />
+                                    </InputAdornment>
+                                ),
+                            },
                         }}
                         sx={{
                             width: { xs: "100%", sm: 320 },
@@ -582,7 +583,7 @@ const Students = () => {
                             <MenuItem value="" sx={{ fontSize: 13 }}>
                                 Batch
                             </MenuItem>
-                            {batchList.map((b) => (
+                            {batchList.map((b: string) => (
                                 <MenuItem key={b} value={b} sx={{ fontSize: 13 }}>
                                     {b}
                                 </MenuItem>
@@ -611,7 +612,7 @@ const Students = () => {
                             <MenuItem value="" sx={{ fontSize: 13 }}>
                                 Department
                             </MenuItem>
-                            {departmentList.map((d) => (
+                            {departmentList.map((d: string) => (
                                 <MenuItem key={d} value={d} sx={{ fontSize: 13 }}>
                                     {d}
                                 </MenuItem>
@@ -756,7 +757,7 @@ const Students = () => {
 
             <Dialog
                 open={Boolean(studentToDelete)}
-                onClose={isDeleting ? undefined : handleCloseDelete}
+                onClose={isDeleting ? () => {} : handleCloseDelete}
                 title="Delete Student"
                 description={
                     studentToDelete

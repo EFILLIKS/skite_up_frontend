@@ -47,7 +47,6 @@ import { resolveAudioUrl, formatAudioTime } from "../../utils/audioUtils";
 import type {
   StudentTestResultData,
   StudentQuestionEvaluation,
-  StudentCodingTestCase,
 } from "../../types/Assessment.types";
 import type { GrammarCheckResponse, LsrwSection } from "../../types/Grammar.types";
 import { GrammarAnalysisPanel } from "../../components/grammar/GrammarAnalysisPanel";
@@ -403,23 +402,6 @@ export const AssessmentResultDetailPage: React.FC = () => {
         console.warn("Audio prompt play failed:", err);
         setIsPlayingAudioPrompt(false);
       });
-  };
-
-  const handleSeekAudio = (
-    player: HTMLAudioElement | null,
-    totalDuration: number,
-    clickEvent: React.MouseEvent<HTMLDivElement>,
-    setTimeState: (t: number) => void
-  ) => {
-    const rect = clickEvent.currentTarget.getBoundingClientRect();
-    const clickX = Math.max(0, Math.min(clickEvent.clientX - rect.left, rect.width));
-    const ratio = rect.width > 0 ? clickX / rect.width : 0;
-    const effectiveDur = totalDuration > 0 ? totalDuration : 15;
-    const newTime = ratio * effectiveDur;
-    if (player) {
-      player.currentTime = newTime;
-    }
-    setTimeState(newTime);
   };
 
   const parsedStudentDuration = parseDurationSeconds(currentQuestion?.studentAudioDuration);

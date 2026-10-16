@@ -9,7 +9,6 @@ import {
     Typography,
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import Button from "../../components/common/Button";
@@ -24,7 +23,6 @@ import type { SnackbarState } from "../../types/Snackbar.types";
 
 const Login = () => {
     const [showPassword, setShowPassword] = useState<boolean>(false);
-    const navigate = useNavigate();
     const [snackbar, setSnackbar] = useState<SnackbarState>({
         open: false,
         message: "",

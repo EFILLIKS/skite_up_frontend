@@ -71,7 +71,6 @@ export const AssessmentCreationWizard: React.FC<AssessmentCreationWizardProps> =
   const [activeCategoryTab, setActiveCategoryTab] = useState<"MCQ" | "LSRW" | "Coding">("MCQ");
   const [questionSearch, setQuestionSearch] = useState<string>("");
   const [selectedQuestionType, setSelectedQuestionType] = useState<string>("All Question Type");
-  const [selectedTopic, setSelectedTopic] = useState<string>("All Topics");
   const [selectedLevel, setSelectedLevel] = useState<string>("All Levels");
 
   const [selectedMcqIds, setSelectedMcqIds] = useState<string[]>([]);

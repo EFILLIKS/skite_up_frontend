@@ -36,7 +36,7 @@ import QuestionDetailDialog from "./components/QuestionDetailDialog";
 import LSRWQuestionBankView from "./components/LSRWQuestionBankView";
 import CodingQuestionBankView from "./components/CodingQuestionBankView";
 import type { AppTableColumn } from "../../types/Table.types";
-import type { MCQQuestionResponse, QuestionBankItem } from "../../types/QuestionBank.types";
+import type { QuestionBankItem } from "../../types/QuestionBank.types";
 
 export const QuestionBank: React.FC = () => {
   const {
@@ -45,7 +45,9 @@ export const QuestionBank: React.FC = () => {
     skillsTree,
     mcqLimit,
     selectedSkill,
+    setSelectedSkill,
     selectedTopic,
+    setSelectedTopic,
     expandedSkills,
     toggleSkillAccordion,
     handleSelectSkill,
@@ -113,7 +115,6 @@ export const QuestionBank: React.FC = () => {
     handleExecuteBulkImport,
 
     snackbar,
-    showSnackbar,
     closeSnackbar,
   } = useQuestionBank();
 
@@ -325,8 +326,6 @@ export const QuestionBank: React.FC = () => {
       ),
     },
   ];
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / rowsPerPage));
 
   return (
     <Box sx={{ pb: { xs: 8, md: 12 } }}>

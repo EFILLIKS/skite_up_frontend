@@ -1,6 +1,5 @@
 import { authApi } from "../authservice/AuthApi";
 import type {
-  QuestionBankItem,
   QuestionBankRequestDto,
   SingleQuestionApiResponse,
   QuestionBankBulkUploadResponse,

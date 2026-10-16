@@ -20,7 +20,6 @@ import {
   KeyboardDoubleArrowLeftOutlined,
   KeyboardDoubleArrowRightOutlined,
   SearchOutlined,
-  VisibilityOutlined,
 } from "@mui/icons-material";
 import Table from "../../components/common/Table";
 import type { AppTableColumn } from "../../types/Table.types";

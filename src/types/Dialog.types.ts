@@ -5,7 +5,7 @@ export interface AppDialogProps
   extends Omit<DialogProps, "title" | "onClose"> {
   title?: string;
   description?: string;
-  children: ReactNode;
+  children?: ReactNode;
   open: boolean;
   onClose: () => void;
   actions?: ReactNode;

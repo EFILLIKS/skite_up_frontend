@@ -148,12 +148,15 @@ export function runGrammarVerificationSuite(): {
     testName: "Backend response wrapper unmarshalled correctly",
     passed:
       normalized.finalScore === 81 &&
-      normalized.errors.length === 1 &&
-      normalized.errors[0].suggestion === "went",
+      Boolean(
+        normalized.errors &&
+        normalized.errors.length === 1 &&
+        normalized.errors[0]?.suggestion === "went"
+      ),
   });
 
   const original = "He go to school yesterday.";
-  const segments = segmentTextWithErrors(original, normalized.errors);
+  const segments = segmentTextWithErrors(original, normalized.errors || []);
   const reconstructed = segments.map((s) => s.text).join("");
   results.push({
     testName: "Original text preserved identically without automatic alteration",

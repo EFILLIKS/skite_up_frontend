@@ -34,7 +34,6 @@ export const SectionSystemCheckCard: React.FC<SectionSystemCheckCardProps> = ({
   sectionKey,
   sectionType,
   questionCount,
-  totalMarks,
   beepPlayed,
   micAuthorized,
   onPlayBeep,
