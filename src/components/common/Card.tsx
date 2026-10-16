@@ -6,26 +6,34 @@ import {
 } from "@mui/material";
 import type { AppCardProps } from "../../types/Card.types";
 
-const Card = (props: AppCardProps) => {
+const Card = ({
+    title,
+    subtitle,
+    headerAction,
+    children,
+    contentSx,
+    footer,
+    ...restProps
+}: AppCardProps) => {
     return (
-        <CardMUI {...props}>
-            {(props.title || props.subtitle || props.headerAction) && (
+        <CardMUI {...restProps}>
+            {(title || subtitle || headerAction) && (
                 <CardHeader
-                    title={props.title}
-                    subheader={props.subtitle}
-                    action={props.headerAction}
+                    title={title}
+                    subheader={subtitle}
+                    action={headerAction}
                 />
             )}
 
-            {props.children && (
-                <CardContent sx={props.contentSx}>
-                    {props.children}
+            {children && (
+                <CardContent sx={contentSx}>
+                    {children}
                 </CardContent>
             )}
 
-            {props.footer && (
+            {footer && (
                 <CardActions>
-                    {props.footer}
+                    {footer}
                 </CardActions>
             )}
         </CardMUI>

@@ -1,4 +1,5 @@
-import { Button as ButtonMUI, CircularProgress, type ButtonProps } from "@mui/material";
+import { Button as ButtonMUI, CircularProgress } from "@mui/material";
+import type { ButtonProps } from "../../types/Button.types";
 
 const Button = (props: ButtonProps) => {
     return (

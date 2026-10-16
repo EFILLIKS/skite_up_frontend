@@ -1,5 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { authApi } from "../../features/authservice/AuthApi";
+import { setupListeners } from "@reduxjs/toolkit/query";
 
 export const store = configureStore({
     reducer: {
@@ -8,3 +9,5 @@ export const store = configureStore({
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware().concat(authApi.middleware),
 });
+
+setupListeners(store.dispatch);

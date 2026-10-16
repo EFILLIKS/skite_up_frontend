@@ -4,9 +4,11 @@ import type { TableProps, TableCellProps } from "@mui/material";
 export interface AppTableColumn<T> {
     id: keyof T | string;
     label: string;
+    header?: ReactNode;
     align?: TableCellProps["align"];
     minWidth?: number;
-    render?: (row: T) => ReactNode;
+    width?: number | string;
+    render?: (row: T, index: number) => ReactNode;
 }
 
 export interface AppTableProps<T> extends TableProps {

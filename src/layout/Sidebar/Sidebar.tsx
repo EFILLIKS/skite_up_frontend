@@ -17,19 +17,36 @@ import ChevronLeftRoundedIcon from "@mui/icons-material/ChevronLeftRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import { navigationConfig, getFilteredNavigation } from "../nav.config";
 import { type SidebarProps } from "../../types/SideBar.types";
+import { checkIsExpired } from "../../utils/authUtils";
 import skitupLogo from "../../assets/skitup-logo.svg";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 const SIDEBAR_WIDTH = 180;
 
 export const Sidebar: React.FC<SidebarProps> = (props) => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
+  const location = useLocation();
   const { open, onClose, currentUser, activeId, onSelectNav, isMobile } = props;
-  const visibleSections = getFilteredNavigation(navigationConfig, currentUser.role);
+  const [authVersion, setAuthVersion] = React.useState(0);
+  React.useEffect(() => {
+    const handleAuthChange = () => setAuthVersion((v) => v + 1);
+    window.addEventListener("auth-status-changed", handleAuthChange);
+    window.addEventListener("storage", handleAuthChange);
+    return () => {
+      window.removeEventListener("auth-status-changed", handleAuthChange);
+      window.removeEventListener("storage", handleAuthChange);
+    };
+  }, []);
+
+  const isPaid = localStorage.getItem("isPaid") === "true";
+  const isExpired = checkIsExpired();
+  const visibleSections = React.useMemo(
+    () => getFilteredNavigation(navigationConfig, currentUser.role, isPaid, isExpired),
+    [currentUser.role, isPaid, isExpired, authVersion]
+  );
   const handleLogout = () => {
     navigate("/");
     localStorage.clear();
-
-  }
+  };
   const sidebarContent = (
     <Box
       sx={{
@@ -110,75 +127,112 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
 
             <List disablePadding>
               {section.items.map((item) => {
-                const isActive = activeId === item.id;
+                const isActive =
+                  location.pathname === item.path ||
+                  (item.path !== "/" &&
+                    item.path !== "/dashboard" &&
+                    item.path !== "/institution/dashboard" &&
+                    location.pathname.startsWith(item.path)) ||
+                  activeId === item.id;
                 const isDisabled = Boolean(item.disabled);
-                return (
-                  <ListItem key={item.id} disablePadding sx={{ mb: 0.5 }}>
-                    <ListItemButton
-                      disabled={isDisabled}
-                      onClick={() => onSelectNav(item.id, item.title)}
+                const buttonItem = (
+                  <ListItemButton
+                    disabled={isDisabled}
+                    onClick={() => {
+                      if (isDisabled) return;
+                      onSelectNav(item.id, item.title);
+                      navigate(item.path);
+                    }}
+                    sx={{
+                      position: "relative",
+                      minHeight: 34,
+                      borderRadius: 1,
+                      py: 0.75,
+                      px: 1,
+                      transition: "all 0.15s ease",
+                      bgcolor: isActive && !isDisabled ? "#eaf4fc" : "transparent",
+                      color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#475467",
+                      "&.Mui-disabled": {
+                        opacity: 0.45,
+                        cursor: "not-allowed",
+                        pointerEvents: "auto",
+                      },
+                      "&::before": {
+                        content: '""',
+                        position: "absolute",
+                        left: 0,
+                        top: 4,
+                        bottom: 4,
+                        width: 3,
+                        borderRadius: 4,
+                        bgcolor: isActive && !isDisabled ? "#337ECC" : "transparent",
+                      },
+                      "&:hover": {
+                        bgcolor: isDisabled ? "transparent" : isActive ? "#eaf4fc" : "#f9fafb",
+                        color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#1d2939",
+                      },
+                    }}
+                  >
+                    <ListItemIcon
                       sx={{
-                        position: "relative",
-                        minHeight: 34,
-                        borderRadius: 1,
-                        py: 0.75,
-                        px: 1,
-                        transition: "all 0.15s ease",
-                        bgcolor: isActive && !isDisabled ? "#eaf4fc" : "transparent",
-                        color: isDisabled ? "#b4bac5" : isActive ? "#337ECC" : "#475467",
-                        "&::before": {
-                          content: '""',
-                          position: "absolute",
-                          left: 0,
-                          top: 4,
-                          bottom: 4,
-                          width: 3,
-                          borderRadius: 4,
-                          bgcolor: isActive && !isDisabled ? "#337ECC" : "transparent",
+                        minWidth: 30,
+                        color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#667085",
+                        transition: "color 0.15s ease",
+                        "& svg": {
+                          color: isDisabled ? "#98a2b3 !important" : isActive && !isDisabled ? "#337ECC !important" : undefined,
+                          stroke: isDisabled ? "#98a2b3" : isActive && !isDisabled ? "#337ECC" : undefined,
+                          fill: "none",
                         },
-                        "&:hover": {
-                          bgcolor: isDisabled ? "transparent" : isActive ? "#eaf4fc" : "#f9fafb",
-                          color: isDisabled ? "#b4bac5" : isActive ? "#337ECC" : "#1d2939",
+                        "& svg path, & svg circle, & svg rect": {
+                          stroke: isDisabled ? "#98a2b3" : isActive && !isDisabled ? "#337ECC" : undefined,
+                          fill: "none",
                         },
                       }}
                     >
-                      <ListItemIcon
-                        sx={{
-                          minWidth: 30,
-                          color: isDisabled ? "#b4bac5" : isActive ? "#337ECC" : "#667085",
-                          transition: "color 0.15s ease",
-                        }}
-                      >
-                        {item.icon}
-                      </ListItemIcon>
+                      {item.icon}
+                    </ListItemIcon>
 
-                      <ListItemText
-                        primary={item.title}
-                        slotProps={{
-                          primary: {
-                            sx: {
-                              fontSize: 12,
-                              fontWeight: isActive ? 600 : 500,
-                            },
+                    <ListItemText
+                      primary={item.title}
+                      slotProps={{
+                        primary: {
+                          sx: {
+                            fontSize: 12,
+                            fontWeight: isActive && !isDisabled ? 600 : 500,
+                            color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#344054",
                           },
+                        },
+                      }}
+                    />
+
+                    {item.badge && (
+                      <Chip
+                        label={item.badge}
+                        color={item.badgeColor || "default"}
+                        size="small"
+                        sx={{
+                          height: 20,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          borderRadius: 1.5,
+                          px: 0.4,
                         }}
                       />
+                    )}
+                  </ListItemButton>
+                );
 
-                      {item.badge && (
-                        <Chip
-                          label={item.badge}
-                          color={item.badgeColor || "default"}
-                          size="small"
-                          sx={{
-                            height: 20,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            borderRadius: 1.5,
-                            px: 0.4,
-                          }}
-                        />
-                      )}
-                    </ListItemButton>
+                return (
+                  <ListItem key={item.id} disablePadding sx={{ mb: 0.5 }}>
+                    {isDisabled ? (
+                      <Tooltip title="Subscription required (Plan expired)" arrow placement="right">
+                        <Box component="span" sx={{ width: "100%", display: "block", cursor: "not-allowed" }}>
+                          {buttonItem}
+                        </Box>
+                      </Tooltip>
+                    ) : (
+                      buttonItem
+                    )}
                   </ListItem>
                 );
               })}
@@ -190,10 +244,10 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
           </Box>
         ))}
       </Box>
-      <Box sx={{ borderTop: "1px solid #eaecf0", px: 0, py: 1.5 }}>
+      <Box sx={{ borderTop: "1px solid #eaecf0", px: 1, pt: 1.5, pb: 3.5, mt: "auto" }}>
         <Box sx={{ display: "flex", alignItems: "center" }}>
           <Box
-          color="inherit"
+            color="inherit"
             sx={{
               display: "flex",
               alignItems: "center",

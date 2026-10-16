@@ -33,14 +33,17 @@ const Input = (props: AppInputProps) => {
             );
         }
 
-        case "select":
+        case "select": {
+            const { ref, ...fieldProps } = props.textFieldProps ?? {};
+
             return (
                 <TextField
                     select
                     fullWidth
                     size="small"
                     label={props.label}
-                    {...props.textFieldProps}
+                    {...fieldProps}
+                    inputRef={ref}
                 >
                     {props.options.map((option) => (
                         <MenuItem key={option.value} value={option.value}>
@@ -49,6 +52,7 @@ const Input = (props: AppInputProps) => {
                     ))}
                 </TextField>
             );
+        }
 
         case "textarea":
             return (

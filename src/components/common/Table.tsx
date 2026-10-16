@@ -22,9 +22,9 @@ const Table = <T,>(props: AppTableProps<T>) => {
                             <TableCell
                                 key={String(column.id)}
                                 align={column.align}
-                                sx={{ fontWeight: 600, minWidth: column.minWidth }}
+                                sx={{ fontWeight: 600, minWidth: column.minWidth, width: column.width }}
                             >
-                                {column.label}
+                                {column.header ?? column.label}
                             </TableCell>
                         ))}
                     </TableRow>
@@ -35,7 +35,7 @@ const Table = <T,>(props: AppTableProps<T>) => {
                         Array.from({ length: 5 }).map((_, index) => (
                             <TableRow key={index}>
                                 {columns.map((column) => (
-                                    <TableCell key={String(column.id)}>
+                                    <TableCell key={String(column.id)} sx={{ minWidth: column.minWidth, width: column.width }}>
                                         <Skeleton variant="text" />
                                     </TableCell>
                                 ))}
@@ -48,21 +48,22 @@ const Table = <T,>(props: AppTableProps<T>) => {
                                 align="center"
                                 sx={{ py: 4 }}
                             >
-                                <Typography color="text.error">
+                                <Typography color="text.secondary">
                                     {emptyMessage}
                                 </Typography>
                             </TableCell>
                         </TableRow>
                     ) : (
-                        rows.map((row) => (
+                        rows.map((row, index) => (
                             <TableRow key={getRowId(row)} hover>
                                 {columns.map((column) => (
                                     <TableCell
                                         key={String(column.id)}
                                         align={column.align}
+                                        sx={{ minWidth: column.minWidth, width: column.width }}
                                     >
                                         {column.render
-                                            ? column.render(row)
+                                            ? column.render(row, index)
                                             : String(
                                                 (row as Record<string, unknown>)[
                                                 String(column.id)

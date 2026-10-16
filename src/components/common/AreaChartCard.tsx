@@ -16,7 +16,9 @@ const defaultCategories = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug
 const formatRupees = (amount: number) => `₹ ${amount.toLocaleString("en-IN")}`;
 
 const AreaChartCard = ({ title, subtitle, color, values, categories = defaultCategories }: AreaChartCardProps) => {
-    const maximum = Math.ceil(Math.max(...values) / 100000) * 100000 || 100000;
+    const safeValues = values && values.length > 0 ? values : [0];
+    const maxVal = Math.max(...safeValues);
+    const maximum = maxVal > 0 ? (Math.ceil(maxVal / 100000) * 100000 || 100000) : 100000;
     const options: ApexOptions = {
         chart: {
             type: "area",

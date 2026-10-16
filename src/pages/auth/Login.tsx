@@ -18,6 +18,7 @@ import logo from "../../assets/skitup-logo.svg";
 import type { LoginFormData } from "../../types/login.type";
 import { Loginschema } from "../../utils/Loginschema";
 import { useLoginMutation } from "../../features/authservice/AuthApi";
+import { checkIsExpired } from "../../utils/authUtils";
 import Snackbar from "../../components/common/Snackbar";
 import type { SnackbarState } from "../../types/Snackbar.types";
 
@@ -48,6 +49,7 @@ const Login = () => {
     const onSubmit = async (data: LoginFormData) => {
         try {
             const response = await login(data).unwrap();
+
             if ((response as { statusCode?: number })?.statusCode === 200) {
                 setSnackbar({
                     open: true,
@@ -55,8 +57,38 @@ const Login = () => {
                     severity: "success",
                 });
 
-                navigate("/dashboard");
+                const currentRole =
+                    (response as any)?.data?.role ||
+                    localStorage.getItem("role");
 
+                const isPaid =
+                    localStorage.getItem("isPaid") === "true" ||
+                    (response as any)?.data?.isPaid === true;
+
+                const isExpired =
+                    checkIsExpired() ||
+                    localStorage.getItem("isExpired") === "true" ||
+                    (response as any)?.data?.isExpired === true ||
+                    (typeof (response as any)?.data?.planStatus === "string" &&
+                        (response as any).data.planStatus.toLowerCase().includes("expired"));
+
+                if (currentRole === "ROLE_INSTITUTION_ADMIN") {
+                    if (isPaid && !isExpired) {
+                        window.location.href = "/institution/dashboard";
+                    } else {
+                        window.location.href = "/subscription";
+                    }
+                } else if (currentRole === "ROLE_TEACHER") {
+                    localStorage.setItem(
+                        "institutionId",
+                        (response as any)?.data?.institutionId
+                    );
+                    window.location.href = "/teacher/dashboard";
+                } else if (currentRole === "ROLE_STUDENT") {
+                    window.location.href = "/student/dashboard";
+                } else {
+                    window.location.href = "/dashboard";
+                }
             }
         } catch (error) {
             setSnackbar({
@@ -93,7 +125,7 @@ const Login = () => {
                     pt: 5,
                     pb: 4,
                     width: "100%",
-                    maxWidth: 380,
+                    maxWidth: { xs: "100%", sm: 460, md: 480 },
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
@@ -141,7 +173,7 @@ const Login = () => {
                         type="text"
                         textFieldProps={{
                             ...register("email"),
-                            placeholder: "user@skiteup.com",
+                            placeholder: "user@skiteup.com or Register Number",
                             error: !!errors.email,
                             fullWidth: true,
                             autoComplete: "username",
