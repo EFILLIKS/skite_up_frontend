@@ -18,7 +18,24 @@ import type {
 } from "../../types/Auth.api.types";
 
 
-const clearStoredAuthData = (): void => {
+export const getStoredAccessToken = (): string | null => {
+    return sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+};
+
+export const getStoredRefreshToken = (): string | null => {
+    return sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken");
+};
+
+export const clearStoredAuthData = (): void => {
+    sessionStorage.removeItem("accessToken");
+    sessionStorage.removeItem("refreshToken");
+    sessionStorage.removeItem("exp");
+    sessionStorage.removeItem("role");
+    sessionStorage.removeItem("userId");
+    sessionStorage.removeItem("orgId");
+    sessionStorage.removeItem("isPaid");
+    sessionStorage.removeItem("isExpired");
+
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("exp");
@@ -29,7 +46,7 @@ const clearStoredAuthData = (): void => {
     localStorage.removeItem("isExpired");
 };
 
-const setStoredAuthData = (payload?: {
+export const setStoredAuthData = (payload?: {
     accessToken?: string;
     refreshToken?: string;
 }): void => {
@@ -42,40 +59,44 @@ const setStoredAuthData = (payload?: {
     try {
         const decoded = jwtDecode<JwtPayload>(accessToken);
 
+        // Store in BOTH sessionStorage (for per-tab/window isolation) and localStorage (for persistence)
+        sessionStorage.setItem("accessToken", accessToken);
         localStorage.setItem("accessToken", accessToken);
 
         if (decoded.exp) {
+            sessionStorage.setItem("exp", String(decoded.exp));
             localStorage.setItem("exp", String(decoded.exp));
         }
 
         if (decoded.sub) {
+            sessionStorage.setItem("userId", decoded.sub);
             localStorage.setItem("userId", decoded.sub);
         }
 
         if (decoded.role) {
+            sessionStorage.setItem("role", decoded.role);
             localStorage.setItem("role", decoded.role);
         }
         if (decoded.isPaid !== undefined && decoded.isPaid !== null) {
+            sessionStorage.setItem("isPaid", String(decoded.isPaid));
             localStorage.setItem("isPaid", String(decoded.isPaid));
         }
         if (decoded.isExpired !== undefined && decoded.isExpired !== null) {
+            sessionStorage.setItem("isExpired", String(decoded.isExpired));
             localStorage.setItem("isExpired", String(decoded.isExpired));
         } else if (decoded.planStatus && decoded.planStatus.toLowerCase().includes("expired")) {
+            sessionStorage.setItem("isExpired", "true");
             localStorage.setItem("isExpired", "true");
         }
 
         if (decoded.organizationId) {
-            localStorage.setItem(
-                "orgId",
-                decoded.organizationId
-            );
+            sessionStorage.setItem("orgId", decoded.organizationId);
+            localStorage.setItem("orgId", decoded.organizationId);
         }
 
         if (payload.refreshToken) {
-            localStorage.setItem(
-                "refreshToken",
-                payload.refreshToken
-            );
+            sessionStorage.setItem("refreshToken", payload.refreshToken);
+            localStorage.setItem("refreshToken", payload.refreshToken);
         }
     } catch (error) {
         console.error(
@@ -110,11 +131,11 @@ export const isAccessTokenExpired = (
 const baseQuery = fetchBaseQuery({
     baseUrl: import.meta.env.VITE_API_BASE_URL,
 
-    prepareHeaders: (headers) => {
-        const accessToken =
-            localStorage.getItem("accessToken");
+    prepareHeaders: (headers, { endpoint }) => {
+        const accessToken = getStoredAccessToken();
 
-        if (accessToken) {
+        // Never attach Authorization header on login or refresh endpoints
+        if (accessToken && endpoint !== "refresh" && endpoint !== "login") {
             headers.set(
                 "Authorization",
                 `Bearer ${accessToken}`
@@ -124,6 +145,69 @@ const baseQuery = fetchBaseQuery({
         return headers;
     },
 });
+
+// Shared singleton promise to prevent concurrent refresh calls and race conditions
+let activeRefreshPromise: Promise<string | null> | null = null;
+
+export const requestNewAccessToken = async (): Promise<string | null> => {
+    // If a refresh is already in progress, wait for it instead of firing duplicate requests
+    if (activeRefreshPromise) {
+        return activeRefreshPromise;
+    }
+
+    activeRefreshPromise = (async () => {
+        try {
+            const refreshToken = getStoredRefreshToken();
+            if (!refreshToken) {
+                return null;
+            }
+
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
+            // Call /auth/refresh without Authorization header to avoid server-side ExpiredJwtException
+            const response = await fetch(`${baseUrl}/auth/refresh`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ refreshToken }),
+            });
+
+            if (!response.ok) {
+                // Only clear session if refresh token is explicitly rejected by auth server (401 / 403)
+                if (response.status === 401 || response.status === 403) {
+                    console.warn("Refresh token expired or invalid (HTTP " + response.status + "). Clearing session.");
+                    clearStoredAuthData();
+                } else {
+                    console.warn("Refresh token call returned HTTP " + response.status + ". Preserving session.");
+                }
+                return null;
+            }
+
+            const data = await response.json();
+            const newAccessToken =
+                data?.data?.accessToken || data?.accessToken;
+            const newRefreshToken =
+                data?.data?.refreshToken || data?.refreshToken || refreshToken;
+
+            if (newAccessToken) {
+                setStoredAuthData({
+                    accessToken: newAccessToken,
+                    refreshToken: newRefreshToken,
+                });
+                return newAccessToken;
+            }
+            return null;
+        } catch (error) {
+            console.error("Network or connection error during token refresh:", error);
+            // DO NOT clear auth data during network disconnect or offline testing!
+            return null;
+        } finally {
+            activeRefreshPromise = null;
+        }
+    })();
+
+    return activeRefreshPromise;
+};
 
 const baseQueryWithReauth: BaseQueryFn<
     string | FetchArgs,
@@ -137,112 +221,43 @@ const baseQueryWithReauth: BaseQueryFn<
         const requestUrl =
             typeof args === "string" ? args : args.url;
 
+        // Don't intercept auth endpoints
         if (
-            requestUrl !== "/auth/login" &&
-            requestUrl !== "/auth/refresh"
+            requestUrl === "/auth/login" ||
+            requestUrl === "/auth/refresh"
         ) {
-            const accessToken = localStorage.getItem("accessToken");
-            const refreshToken = localStorage.getItem("refreshToken");
-
-            if (accessToken && isAccessTokenExpired(accessToken) && refreshToken) {
-                const refreshResult = await baseQuery(
-                    {
-                        url: "/auth/refresh",
-                        method: "POST",
-                        body: {
-                            refreshToken,
-                        },
-                    },
-                    api,
-                    extraOptions
-                );
-
-                if (refreshResult.data && !refreshResult.error) {
-                    const refreshResponse = refreshResult.data as RefreshTokenResponse;
-                    const newAccessToken = refreshResponse?.data?.accessToken;
-                    const newRefreshToken = refreshResponse?.data?.refreshToken ?? refreshToken;
-
-                    if (newAccessToken) {
-                        setStoredAuthData({
-                            accessToken: newAccessToken,
-                            refreshToken: newRefreshToken,
-                        });
-                    }
-                } else {
-                    clearStoredAuthData();
-                }
-            }
+            return await baseQuery(args, api, extraOptions);
         }
 
+        // 1. If access token is known to be expired, refresh it first
+        const accessToken = getStoredAccessToken();
+        const refreshToken = getStoredRefreshToken();
+
+        if (accessToken && isAccessTokenExpired(accessToken) && refreshToken) {
+            await requestNewAccessToken();
+        }
+
+        // 2. Perform the actual query
         let result = await baseQuery(
             args,
             api,
             extraOptions
         );
 
-        if (
-            requestUrl === "/auth/login" ||
-            requestUrl === "/auth/refresh"
-        ) {
-            return result;
-        }
+        // 3. If query returns 401 Unauthorized, refresh and retry once
+        if (result.error && result.error.status === 401) {
+            const currentRefreshToken = localStorage.getItem("refreshToken");
 
-        if (
-            result.error &&
-            (result.error.status === 401 ||
-                result.error.status === 403)
-        ) {
-            const refreshToken =
-                localStorage.getItem("refreshToken");
+            if (currentRefreshToken) {
+                const refreshedToken = await requestNewAccessToken();
 
-            if (!refreshToken) {
-                clearStoredAuthData();
-
-                return result;
-            }
-
-            const refreshResult = await baseQuery(
-                {
-                    url: "/auth/refresh",
-                    method: "POST",
-                    body: {
-                        refreshToken,
-                    },
-                },
-                api,
-                extraOptions
-            );
-
-            if (
-                refreshResult.data &&
-                !refreshResult.error
-            ) {
-                const refreshResponse =
-                    refreshResult.data as RefreshTokenResponse;
-
-                const newAccessToken =
-                    refreshResponse?.data?.accessToken;
-
-                const newRefreshToken =
-                    refreshResponse?.data?.refreshToken ??
-                    refreshToken;
-
-                if (newAccessToken) {
-                    setStoredAuthData({
-                        accessToken: newAccessToken,
-                        refreshToken: newRefreshToken,
-                    });
-
+                if (refreshedToken) {
                     result = await baseQuery(
                         args,
                         api,
                         extraOptions
                     );
-                } else {
-                    clearStoredAuthData();
                 }
-            } else {
-                clearStoredAuthData();
             }
         }
 
@@ -362,10 +377,10 @@ export const authApi = createApi({
                         await queryFulfilled;
 
                     const accessToken =
-                        data?.data?.accessToken;
+                        data?.data?.accessToken || (data as any)?.accessToken;
 
                     const refreshToken =
-                        data?.data?.refreshToken;
+                        data?.data?.refreshToken || (data as any)?.refreshToken;
 
                     if (accessToken) {
                         setStoredAuthData({
@@ -376,16 +391,17 @@ export const authApi = createApi({
                         console.error(
                             "Refresh response did not contain an access token."
                         );
-
-                        clearStoredAuthData();
                     }
-                } catch (error) {
+                } catch (error: any) {
                     console.error(
                         "Refresh token failed:",
                         error
                     );
 
-                    clearStoredAuthData();
+                    const status = error?.error?.status || error?.status;
+                    if (status === 401 || status === 403) {
+                        clearStoredAuthData();
+                    }
                 }
             },
         }),

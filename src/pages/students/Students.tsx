@@ -88,7 +88,7 @@ const parseTestRatio = (
 
 const Students = () => {
     const navigate = useNavigate();
-    const role = localStorage.getItem("role")
+    const role = sessionStorage.getItem("role") || localStorage.getItem("role");
     const [searchTerm, setSearchTerm] = useState("");
     const debouncedSearch = useDebounce(searchTerm, 400);
     const [selectedBatch, setSelectedBatch] = useState("");

@@ -12,6 +12,8 @@ import {
 } from "../features/assessment/QuestionBankApi";
 import {
   createEmptyQuestion,
+  getQuestionTotalMarks,
+  usesPerAnswerMarks,
   singleQuestionSchema,
   questionCountSchema,
   type QuestionFormData,
@@ -381,25 +383,29 @@ export const useQuestionBank = () => {
   };
 
   const handleOpenEdit = (question: QuestionBankItem) => {
+    const questionType =
+      question.questionType ||
+      (question.subtype === "MULTIPLE_CHOICE" ? "Multiple choice" : "Single choice");
+    const options = (question.options || []).map((opt, idx) => ({
+      id: opt.id || `opt-${idx}`,
+      optionKey: opt.optionKey || String.fromCharCode(65 + idx),
+      optionText: opt.optionText,
+      isCorrect: opt.isCorrect,
+    }));
     const mapped: QuestionFormData = {
       questionNumber: 1,
-      questionType:
-        question.questionType ||
-        (question.subtype === "MULTIPLE_CHOICE" ? "Multiple choice" : "Single choice"),
+      questionType,
       questionText: question.questionText,
       explanation: question.explanation || "",
       skill: question.skill || question.skillName || "Quantitative Ability",
       topic: question.topic || question.topicName || "Time & Work",
       difficulty: (question.difficulty as "Easy" | "Medium" | "Hard") || "Easy",
-      marks: question.marks || 2,
+      marks: usesPerAnswerMarks(questionType)
+        ? (question.marks || 2) / Math.max(1, options.filter((option) => option.isCorrect).length)
+        : question.marks || 2,
       negativeMarks: Math.abs(question.negativeMarks || 0.5),
       status: (question.status as "Published" | "Draft") || "Published",
-      options: (question.options || []).map((opt, idx) => ({
-        id: opt.id || `opt-${idx}`,
-        optionKey: opt.optionKey || String.fromCharCode(65 + idx),
-        optionText: opt.optionText,
-        isCorrect: opt.isCorrect,
-      })),
+      options,
     };
 
     setIsEditMode(true);
@@ -542,15 +548,17 @@ export const useQuestionBank = () => {
   };
 
   const addOptionToCurrentQuestion = () => {
-    const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+    const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
     const currentOpts = currentQuestion.options || [];
     const nextKey = letters[currentOpts.length] || `Opt${currentOpts.length + 1}`;
+    const qType = (currentQuestion.questionType || "").toLowerCase();
+    const isBlankOrDrag = qType.includes("blank") || qType.includes("drag");
 
     const newOption = {
       id: `opt-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       optionKey: nextKey,
       optionText: "",
-      isCorrect: false,
+      isCorrect: isBlankOrDrag ? true : false,
     };
 
     updateCurrentQuestion({
@@ -559,13 +567,22 @@ export const useQuestionBank = () => {
   };
 
   const removeOptionFromCurrentQuestion = (optionId: string) => {
-    if (currentQuestion.options.length <= 2) {
-      showSnackbar("At least 2 options are required for an MCQ question", "warning");
+    const qType = (currentQuestion.questionType || "").toLowerCase();
+    const isBlankOrDrag = qType.includes("blank") || qType.includes("drag");
+    const minOptions = isBlankOrDrag ? 1 : 2;
+
+    if (currentQuestion.options.length <= minOptions) {
+      showSnackbar(
+        isBlankOrDrag
+          ? "At least 1 item is required"
+          : "At least 2 options are required for an MCQ question",
+        "warning"
+      );
       return;
     }
 
     const updated = currentQuestion.options.filter((o) => o.id !== optionId);
-    const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+    const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
     const rekeyed = updated.map((opt, idx) => ({
       ...opt,
       optionKey: letters[idx] || `Opt${idx + 1}`,
@@ -671,7 +688,7 @@ export const useQuestionBank = () => {
         topic: q.topic,
         difficulty: q.difficulty,
         questionText: q.questionText,
-        marks: q.marks,
+        marks: getQuestionTotalMarks(q),
         negativeMarks: q.negativeMarks > 0 ? -Math.abs(q.negativeMarks) : q.negativeMarks,
         explanation: q.explanation || "",
         status: "Published",
@@ -745,9 +762,9 @@ export const useQuestionBank = () => {
           topic: q.topic,
           difficulty: q.difficulty,
           questionText: q.questionText,
-          marks: q.marks,
+          marks: getQuestionTotalMarks(q),
           negativeMarks: q.negativeMarks > 0 ? -Math.abs(q.negativeMarks) : q.negativeMarks,
-          marksDisplay: `${q.marks} / ${q.negativeMarks > 0 ? -Math.abs(q.negativeMarks) : q.negativeMarks}`,
+          marksDisplay: `${getQuestionTotalMarks(q)} / ${q.negativeMarks > 0 ? -Math.abs(q.negativeMarks) : q.negativeMarks}`,
           explanation: q.explanation,
           status: "Published",
           usedInTests: 0,

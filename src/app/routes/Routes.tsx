@@ -20,6 +20,8 @@ import NotFound from "../../pages/error/NotFound";
 import {
     isAccessTokenExpired,
     useRefreshMutation,
+    getStoredAccessToken,
+    getStoredRefreshToken,
 } from "../../features/authservice/AuthApi";
 import type { JwtPayload } from "../../types/JwtDecode.types";
 import type { UserRole } from "../../types/Nav.types";
@@ -42,15 +44,23 @@ import AssessmentResultDetailPage from "../../pages/assessments/AssessmentResult
 import TeacherViolationPage from "../../pages/violations/TeacherViolationPage";
 
 const getStoredUserRole = (): UserRole | null => {
-    const role = localStorage.getItem("role") as UserRole | null;
-    if (role) {
-        return role;
+    // 1. Check sessionStorage first (isolated to current tab/window)
+    const sessionRole = sessionStorage.getItem("role") as UserRole | null;
+    if (sessionRole) {
+        return sessionRole;
     }
-    const token = localStorage.getItem("accessToken");
+    // 2. Check localStorage if sessionStorage is not yet set
+    const localRole = localStorage.getItem("role") as UserRole | null;
+    if (localRole) {
+        sessionStorage.setItem("role", localRole);
+        return localRole;
+    }
+    const token = getStoredAccessToken();
     if (token) {
         try {
             const decoded = jwtDecode<JwtPayload>(token);
             if (decoded.role) {
+                sessionStorage.setItem("role", decoded.role);
                 localStorage.setItem("role", decoded.role);
                 return decoded.role as UserRole;
             }
@@ -62,8 +72,8 @@ const getStoredUserRole = (): UserRole | null => {
 };
 
 const RequireAuth = () => {
-    const accessToken = localStorage.getItem("accessToken");
-    const refreshToken = localStorage.getItem("refreshToken");
+    const accessToken = getStoredAccessToken();
+    const refreshToken = getStoredRefreshToken();
     const hasValidAccessToken =
         Boolean(accessToken) &&
         !isAccessTokenExpired(accessToken);
@@ -75,8 +85,11 @@ const RequireAuth = () => {
         }
     }, [hasValidAccessToken, refresh, refreshToken]);
 
+    const storedAccessToken = getStoredAccessToken();
     const refreshedAccessToken =
-        refreshResult.data?.data?.accessToken;
+        refreshResult.data?.data?.accessToken ||
+        (refreshResult.data as any)?.accessToken ||
+        storedAccessToken;
     const hasRefreshedAccessToken =
         Boolean(refreshedAccessToken) &&
         !isAccessTokenExpired(refreshedAccessToken);
@@ -85,9 +98,13 @@ const RequireAuth = () => {
         return <Outlet />;
     }
 
+    const refreshErrorStatus = (refreshResult.error as any)?.status;
+    const isExplicitAuthFailure =
+        refreshErrorStatus === 401 || refreshErrorStatus === 403;
+
     if (
         !refreshToken ||
-        refreshResult.isError ||
+        isExplicitAuthFailure ||
         (refreshResult.isSuccess && !hasRefreshedAccessToken)
     ) {
         return <Navigate to="/" replace />;

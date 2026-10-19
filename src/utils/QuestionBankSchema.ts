@@ -22,6 +22,20 @@ export interface QuestionFormData {
   options: QuestionOptionItem[];
 }
 
+export const usesPerAnswerMarks = (questionType: string): boolean => {
+  const normalizedType = questionType.toLowerCase();
+  return normalizedType.includes("blank") || normalizedType.includes("fill") ||
+    normalizedType.includes("drag") || normalizedType.includes("drop");
+};
+
+export const getQuestionTotalMarks = (
+  question: Pick<QuestionFormData, "questionType" | "marks" | "options">
+): number => {
+  if (!usesPerAnswerMarks(question.questionType)) return question.marks;
+  const correctAnswerCount = question.options.filter((option) => option.isCorrect).length;
+  return question.marks * correctAnswerCount;
+};
+
 export const createEmptyQuestion = (
   questionNumber: number = 1,
   defaultSkill: string = "Quantitative Ability",
@@ -84,10 +98,14 @@ export const singleQuestionSchema = object({
     .required("Negative marks are required"),
   options: array()
     .of(questionOptionSchema)
-    .min(2, "At least 2 options are required")
+    .test("options-min-length", "Options or blanks are required", function (options) {
+      const qType = ((this.parent as any)?.questionType || "").toLowerCase();
+      const min = qType.includes("blank") || qType.includes("drag") ? 1 : 2;
+      return Boolean(options && options.length >= min);
+    })
     .test(
       "at-least-one-correct",
-      "Please select at least one correct option",
+      "Please select at least one correct option or provide blank answers",
       (options) => Boolean(options && options.some((opt) => opt.isCorrect))
     )
     .required("Options are required"),

@@ -19,7 +19,12 @@ export interface CategoriesApiResponse {
 export type BackendDifficulty = "EASY" | "MEDIUM" | "HARD" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
 export type BackendStatus = "PUBLISHED" | "DRAFT" | "ARCHIVED";
 
-export type MCQSubtype = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TRUE_FALSE";
+export type MCQSubtype =
+  | "SINGLE_CHOICE"
+  | "MULTIPLE_CHOICE"
+  | "TRUE_FALSE"
+  | "FILL_IN_BLANKS"
+  | "DRAG_AND_DROP";
 
 export interface QuestionBankOption {
   id?: string;
@@ -32,7 +37,13 @@ export type MCQOptionPayload = QuestionBankOption;
 
 export interface QuestionBankRequestDto {
   category: "MCQ" | "LSRW" | "Coding" | "Cognitive Games" | "Draft" | string;
-  questionType: "Single choice" | "Multiple choice" | "True/False" | string;
+  questionType:
+    | "Single choice"
+    | "Multiple choice"
+    | "True/False"
+    | "Fill in the blanks"
+    | "Drag and drop"
+    | string;
   skill: string;
   topic: string;
   difficulty: "Easy" | "Medium" | "Hard" | string;
@@ -49,7 +60,13 @@ export type CreateMCQDto = QuestionBankRequestDto;
 export interface QuestionBankItem {
   id: string;
   category: "MCQ" | "LSRW" | "Coding" | "Cognitive Games" | "Draft" | string;
-  questionType: "Single choice" | "Multiple choice" | "True/False" | string;
+  questionType:
+    | "Single choice"
+    | "Multiple choice"
+    | "True/False"
+    | "Fill in the blanks"
+    | "Drag and drop"
+    | string;
   skill: string;
   topic: string;
   difficulty: "Easy" | "Medium" | "Hard" | string;

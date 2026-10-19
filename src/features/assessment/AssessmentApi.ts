@@ -10,6 +10,8 @@ import type {
   AssessmentTemplateItem,
   TeacherStudentResultsApiResponse,
   TeacherStudentResultsQueryParams,
+  AssessmentDetailResponse,
+  AssessmentDetailData,
 } from "../../types/Assessment.types";
 
 export const assessmentApi = authApi.injectEndpoints({
@@ -57,6 +59,14 @@ export const assessmentApi = authApi.injectEndpoints({
         method: "DELETE",
       }),
       invalidatesTags: ["Assessments"],
+    }),
+
+    getAssessmentById: builder.query<AssessmentDetailResponse, string>({
+      query: (id) => ({
+        url: `/app/assessments/${id}`,
+        method: "GET",
+      }),
+      providesTags: ["Assessments"],
     }),
 
     assignAssessment: builder.mutation<
@@ -375,4 +385,6 @@ export const {
   useLazyGetTeacherStudentResultsQuery,
   useSaveStudentResultFeedbackMutation,
   useCheckGrammarMutation,
+  useGetAssessmentByIdQuery,
+  useLazyGetAssessmentByIdQuery,
 } = assessmentApi;

@@ -8,6 +8,7 @@ export interface DonutChartCardProps {
   series: number[];
   labels: string[];
   colors: string[];
+  counts?: number[];
   title?: string;
   subtitle?: string;
   height?: number;
@@ -17,10 +18,17 @@ export const DonutChartCard: React.FC<DonutChartCardProps> = ({
   series,
   labels,
   colors,
+  counts,
   title,
   subtitle,
   height = 195,
 }) => {
+  const totalSum = series.reduce((a, b) => a + b, 0);
+  const isZeroSum = totalSum === 0;
+
+  const chartSeries = isZeroSum ? [1] : series;
+  const chartColors = isZeroSum ? ["#f2f4f7"] : colors;
+
   const options: ApexOptions = {
     chart: {
       type: "donut",
@@ -28,19 +36,19 @@ export const DonutChartCard: React.FC<DonutChartCardProps> = ({
       toolbar: { show: false },
       zoom: { enabled: false },
     },
-    colors,
-    labels,
+    colors: chartColors,
+    labels: isZeroSum ? ["No Data"] : labels,
     dataLabels: {
       enabled: false,
     },
     stroke: {
-      width: 0,
+      width: isZeroSum ? 0 : 3,
       colors: ["#ffffff"],
     },
     plotOptions: {
       pie: {
         donut: {
-          size: "70%",
+          size: "72%",
           labels: {
             show: false,
           },
@@ -52,8 +60,14 @@ export const DonutChartCard: React.FC<DonutChartCardProps> = ({
     },
     tooltip: {
       theme: "light",
+      enabled: !isZeroSum,
       y: {
-        formatter: (val: number) => `${val}`,
+        formatter: (val: number, opts?: any) => {
+          if (counts && opts?.seriesIndex !== undefined) {
+            return `${counts[opts.seriesIndex] ?? val}`;
+          }
+          return `${val}`;
+        },
       },
     },
   };
@@ -98,7 +112,7 @@ export const DonutChartCard: React.FC<DonutChartCardProps> = ({
           minHeight: height,
         }}
       >
-        <Chart options={options} series={series} type="donut" height={height} width="100%" />
+        <Chart options={options} series={chartSeries} type="donut" height={height} width="100%" />
       </Box>
       <Box
         sx={{
@@ -110,22 +124,28 @@ export const DonutChartCard: React.FC<DonutChartCardProps> = ({
           px: 1,
         }}
       >
-        {labels.map((label, idx) => (
-          <Box key={label} sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                bgcolor: colors[idx] || "#667085",
-                flexShrink: 0,
-              }}
-            />
-            <Typography sx={{ fontSize: "12.5px", fontWeight: 600, color: "#344054" }}>
-              {label}
-            </Typography>
-          </Box>
-        ))}
+        {labels.map((label, idx) => {
+          const count = counts !== undefined ? counts[idx] : series[idx];
+          const hasCountInLabel = /\d+$/.test(label.trim());
+          const displayLabel = hasCountInLabel ? label : `${label} ${count ?? 0}`;
+
+          return (
+            <Box key={label} sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  bgcolor: colors[idx] || "#667085",
+                  flexShrink: 0,
+                }}
+              />
+              <Typography sx={{ fontSize: "12.5px", fontWeight: 600, color: "#344054" }}>
+                {displayLabel}
+              </Typography>
+            </Box>
+          );
+        })}
       </Box>
     </Card>
   );

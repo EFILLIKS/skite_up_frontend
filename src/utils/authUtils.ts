@@ -1,12 +1,25 @@
 import { jwtDecode } from "jwt-decode";
 import type { JwtPayload } from "../types/JwtDecode.types";
 
+export const getStoredAccessToken = (): string | null => {
+  return sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+};
+
+export const getStoredRefreshToken = (): string | null => {
+  return sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken");
+};
+
+export const getStoredUserRole = (): string | null => {
+  return sessionStorage.getItem("role") || localStorage.getItem("role");
+};
+
 export const checkIsExpired = (): boolean => {
-  if (localStorage.getItem("isExpired") === "false") {
+  const isExpiredVal = sessionStorage.getItem("isExpired") || localStorage.getItem("isExpired");
+  if (isExpiredVal === "false") {
     return false;
   }
 
-  const token = localStorage.getItem("accessToken");
+  const token = getStoredAccessToken();
   if (token) {
     try {
       const decoded = jwtDecode<JwtPayload>(token);
@@ -15,9 +28,11 @@ export const checkIsExpired = (): boolean => {
         Boolean(decoded.planStatus && decoded.planStatus.toLowerCase().includes("expired"));
 
       if (isTokenExpired) {
+        sessionStorage.setItem("isExpired", "true");
         localStorage.setItem("isExpired", "true");
         return true;
       } else if (decoded.isExpired === false && (!decoded.planStatus || !decoded.planStatus.toLowerCase().includes("expired"))) {
+        sessionStorage.setItem("isExpired", "false");
         localStorage.setItem("isExpired", "false");
         return false;
       }
@@ -25,5 +40,5 @@ export const checkIsExpired = (): boolean => {
     }
   }
 
-  return localStorage.getItem("isExpired") === "true";
+  return isExpiredVal === "true";
 };

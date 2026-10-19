@@ -39,6 +39,7 @@ import { resolveAudioUrl } from "../../utils/audioUtils";
 
 import Card from "../../components/common/Card";
 import Button from "../../components/common/Button";
+import Input from "../../components/common/Input";
 import Dialog from "../../components/common/Dialog";
 import Snackbar from "../../components/common/Snackbar";
 import type { SnackbarState } from "../../types/Snackbar.types";
@@ -64,7 +65,20 @@ import type {
 } from "../../types/Assessment.types";
 import type { LsrwSection, GrammarCheckResponse } from "../../types/Grammar.types";
 
-type TestStage = "PRE_CHECK" | "SYSTEM_CHECK" | "TEST_SESSION" | "COMPLETED";
+
+const shuffleArray = (array: string[]): string[] => {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  if (arr.length > 1 && arr.every((v, i) => v === array[i])) {
+    [arr[0], arr[arr.length - 1]] = [arr[arr.length - 1], arr[0]];
+  }
+  return arr;
+};
+
+type TestStage = "PRE_CHECK" | "TEST_SESSION" | "COMPLETED";
 
 export const TakeAssessmentPage: React.FC = () => {
   const { id = "" } = useParams<{ id: string }>();
@@ -83,6 +97,15 @@ export const TakeAssessmentPage: React.FC = () => {
 
   const [sectionChecksCompleted, setSectionChecksCompleted] = useState<Record<string, boolean>>({});
 
+  const formatSectionDisplay = (secKey?: string): string => {
+    if (!secKey) return "Objective";
+    const upper = secKey.trim().toUpperCase();
+    if (upper === "MCQ" || upper === "OBJECTIVE" || upper === "OBJECTIVES") {
+      return "Objective";
+    }
+    return secKey;
+  };
+
   const getNormalizedSessionType = (secKey: string): SessionCheckType => {
     const norm = (secKey || "").toUpperCase();
     if (norm.includes("CODE") || norm.includes("CODING") || norm.includes("PROGRAM")) {
@@ -98,8 +121,8 @@ export const TakeAssessmentPage: React.FC = () => {
     ) {
       return "LSRW";
     }
-    if (norm.includes("MCQ") || norm.includes("APTITUDE") || norm.includes("LOGIC") || norm.includes("GENERAL")) {
-      return "MCQ";
+    if (norm.includes("MCQ") || norm.includes("OBJECTIVE") || norm.includes("APTITUDE") || norm.includes("LOGIC") || norm.includes("GENERAL")) {
+      return "OBJECTIVE";
     }
     return "OTHER";
   };
@@ -108,6 +131,11 @@ export const TakeAssessmentPage: React.FC = () => {
   const [textAnswer, setTextAnswer] = useState<string>("");
   const [codeAnswer, setCodeAnswer] = useState<string>("");
   const [selectedLanguage, setSelectedLanguage] = useState<string>("Python");
+
+  const [blankAnswers, setBlankAnswers] = useState<Record<string, string>>({});
+  const [dropSlotAnswers, setDropSlotAnswers] = useState<Record<string, string>>({});
+  const [draggedChip, setDraggedChip] = useState<string | null>(null);
+  const [shuffledOptionsByQuestion, setShuffledOptionsByQuestion] = useState<Record<string, string[]>>({});
 
   const [answersMap, setAnswersMap] = useState<
     Record<
@@ -302,6 +330,305 @@ export const TakeAssessmentPage: React.FC = () => {
   const questionsList: AssessmentQuestionItem[] = sessionData?.questions || [];
   const currentQuestion: AssessmentQuestionItem | undefined = questionsList[currentQuestionIndex];
 
+  const qTypeLower = (
+    currentQuestion?.questionType ||
+    (currentQuestion as any)?.subtype ||
+    (currentQuestion as any)?.subType ||
+    ""
+  ).toLowerCase();
+
+  const isMultipleChoiceQuestion =
+    qTypeLower.includes("multiple") ||
+    qTypeLower.includes("multi");
+
+  const isSingleChoiceQuestion =
+    qTypeLower.includes("single") ||
+    qTypeLower.includes("true") ||
+    qTypeLower.includes("false");
+
+  const isFillInTheBlankQuestion =
+    qTypeLower.includes("blank") ||
+    qTypeLower.includes("fill");
+
+  const isDragAndDropQuestion =
+    qTypeLower.includes("drag") ||
+    qTypeLower.includes("drop");
+
+  const getQuestionInstruction = () => {
+    if (isDragAndDropQuestion) {
+      return "Drag and drop the answer with in present.";
+    }
+    if (isFillInTheBlankQuestion) {
+      return "Fill in the blank area";
+    }
+    if (isMultipleChoiceQuestion) {
+      return "Choose Multiple answer for this type of questions";
+    }
+    return "Choose perfect answer for this type of questions";
+  };
+
+  const blanksList = React.useMemo(() => {
+    if (!currentQuestion) return [];
+    if (currentQuestion.options && currentQuestion.options.length > 0) {
+      return currentQuestion.options.map((opt: any, i: number) => ({
+        key: opt.optionKey || opt.key || String.fromCharCode(65 + i),
+        label: opt.optionText || opt.text || `Blank ${opt.optionKey || String.fromCharCode(65 + i)}`,
+        id: opt.id || `blank-${i}`,
+      }));
+    }
+    const textMatches = currentQuestion.questionText?.match(/_([A-Za-z0-9])\.?_____+|\[([A-Za-z0-9]+)\]|_____+/g);
+    if (textMatches && textMatches.length > 0) {
+      return textMatches.map((m: string, i: number) => {
+        const letterMatch = m.match(/_([A-Za-z0-9])\.?_____+|\[([A-Za-z0-9]+)\]/);
+        const cleanKey = letterMatch ? (letterMatch[1] || letterMatch[2]) : String.fromCharCode(65 + i);
+        return {
+          key: cleanKey,
+          label: `Blank ${cleanKey}`,
+          id: `blank-${cleanKey}-${i}`,
+        };
+      });
+    }
+    return [{ key: "A", label: "Blank A", id: "blank-A" }];
+  }, [currentQuestion]);
+
+  const dropSlotsList = React.useMemo(() => {
+    if (!currentQuestion) return [];
+    const text = currentQuestion.questionText || "";
+    const matches = text.match(/\[\s*([^\]]*)\s*\]|_____+/g);
+    if (matches && matches.length > 0) {
+      return matches.map((m: string, i: number) => {
+        const clean = m.replace(/[\[\]_]/g, "").trim();
+        const slotKey = clean || String.fromCharCode(65 + i);
+        return {
+          id: `slot-${slotKey}`,
+          key: slotKey,
+          index: i,
+          placeholder: clean ? `[ ${clean} ]` : `Slot ${i + 1}`,
+        };
+      });
+    }
+    const count = currentQuestion.options?.length || 3;
+    return Array.from({ length: count }).map((_, i) => {
+      const slotKey = String.fromCharCode(65 + i);
+      return {
+        id: `slot-${slotKey}`,
+        key: slotKey,
+        index: i,
+        placeholder: `[ ${slotKey} ]`,
+      };
+    });
+  }, [currentQuestion]);
+
+  const availableChips = React.useMemo(() => {
+    if (!currentQuestion) return [];
+    let rawOpts: string[] = [];
+    if (currentQuestion.options && currentQuestion.options.length > 0) {
+      rawOpts = currentQuestion.options
+        .map((o: any) => o.optionText || o.text || o.optionKey)
+        .filter(Boolean);
+    } else {
+      rawOpts = ["Console", "Text style", "Manual operation"];
+    }
+
+    const qId = currentQuestion.id;
+    const shuffled = shuffledOptionsByQuestion[qId] || shuffleArray(rawOpts);
+    const placedValues = Object.values(dropSlotAnswers).filter(Boolean);
+    return shuffled.filter((opt: string) => !placedValues.includes(opt));
+  }, [currentQuestion, dropSlotAnswers, shuffledOptionsByQuestion]);
+
+  const handlePlaceChip = (slotId: string, itemText: string) => {
+    if (!currentQuestion) return;
+    const nextAnswers = { ...dropSlotAnswers };
+    Object.keys(nextAnswers).forEach((k) => {
+      if (nextAnswers[k] === itemText) delete nextAnswers[k];
+    });
+    nextAnswers[slotId] = itemText;
+    setDropSlotAnswers(nextAnswers);
+
+    const serialized = JSON.stringify(nextAnswers);
+    setTextAnswer(serialized);
+    const optSummary = Object.values(nextAnswers).filter(Boolean).join(", ");
+    setSelectedOption(optSummary);
+
+    const matches: Record<string, string> = {};
+    const pairs: Array<{ target: string; value: string }> = [];
+    Object.entries(nextAnswers).forEach(([sId, val]) => {
+      if (!val) return;
+      const cleanKey = sId.replace(/^slot-/, "").replace(/[\[\]]/g, "").trim();
+      matches[`[${cleanKey}]`] = val;
+      pairs.push({ target: cleanKey, value: val });
+    });
+
+    const isAnswered = Object.values(nextAnswers).some(Boolean);
+
+    setAnswersMap((prev) => ({
+      ...prev,
+      [currentQuestion.id]: {
+        ...(prev[currentQuestion.id] || { status: "NOT_VISITED" }),
+        status: isAnswered ? "ANSWERED" : "NOT_VISITED",
+        textResponse: serialized,
+        selectedOption: optSummary,
+      },
+    }));
+
+    saveResponseTrigger({
+      id,
+      questionId: currentQuestion.id,
+      body: {
+        action: isAnswered ? "SAVE" : "SKIP",
+        matches,
+        pairs,
+        textResponse: optSummary,
+        selectedOption: optSummary,
+      } as any,
+    }).catch((err) => console.warn("Auto-save drag drop error:", err));
+  };
+
+  const handleRemovePlacedChip = (slotId: string) => {
+    if (!currentQuestion) return;
+    const nextAnswers = { ...dropSlotAnswers };
+    delete nextAnswers[slotId];
+    setDropSlotAnswers(nextAnswers);
+
+    const serialized = JSON.stringify(nextAnswers);
+    setTextAnswer(serialized);
+    const optSummary = Object.values(nextAnswers).filter(Boolean).join(", ");
+    setSelectedOption(optSummary);
+
+    const matches: Record<string, string> = {};
+    const pairs: Array<{ target: string; value: string }> = [];
+    Object.entries(nextAnswers).forEach(([sId, val]) => {
+      if (!val) return;
+      const cleanKey = sId.replace(/^slot-/, "").replace(/[\[\]]/g, "").trim();
+      matches[`[${cleanKey}]`] = val;
+      pairs.push({ target: cleanKey, value: val });
+    });
+
+    const isAnswered = Object.values(nextAnswers).some(Boolean);
+
+    setAnswersMap((prev) => ({
+      ...prev,
+      [currentQuestion.id]: {
+        ...(prev[currentQuestion.id] || { status: "NOT_VISITED" }),
+        status: isAnswered ? "ANSWERED" : "NOT_VISITED",
+        textResponse: serialized,
+        selectedOption: optSummary,
+      },
+    }));
+
+    saveResponseTrigger({
+      id,
+      questionId: currentQuestion.id,
+      body: {
+        action: isAnswered ? "SAVE" : "SKIP",
+        matches,
+        pairs,
+        textResponse: optSummary,
+        selectedOption: optSummary,
+      } as any,
+    }).catch((err) => console.warn("Auto-save drag drop error:", err));
+  };
+
+  const handleClearAll = () => {
+    if (!currentQuestion) return;
+    if (isDragAndDropQuestion) {
+      setDropSlotAnswers({});
+      setTextAnswer("");
+      setSelectedOption("");
+      setAnswersMap((prev) => ({
+        ...prev,
+        [currentQuestion.id]: {
+          ...(prev[currentQuestion.id] || { status: "NOT_VISITED" }),
+          status: "NOT_VISITED",
+          textResponse: "",
+          selectedOption: "",
+        },
+      }));
+      saveResponseTrigger({
+        id,
+        questionId: currentQuestion.id,
+        body: {
+          action: "SKIP",
+          matches: {},
+          pairs: [],
+          textResponse: "",
+          selectedOption: "",
+        } as any,
+      }).catch((err) => console.warn("Clear all drag drop error:", err));
+    } else if (isFillInTheBlankQuestion) {
+      setBlankAnswers({});
+      setTextAnswer("");
+      setAnswersMap((prev) => ({
+        ...prev,
+        [currentQuestion.id]: {
+          ...(prev[currentQuestion.id] || { status: "NOT_VISITED" }),
+          status: "NOT_VISITED",
+          textResponse: "",
+        },
+      }));
+      saveResponseTrigger({
+        id,
+        questionId: currentQuestion.id,
+        body: {
+          action: "SKIP",
+          blanks: [],
+          textResponse: "",
+        } as any,
+      }).catch((err) => console.warn("Clear all blank error:", err));
+    }
+  };
+
+  const handleSelectOption = (optKey: string) => {
+    if (!currentQuestion) return;
+
+    let nextOptStr = "";
+    let nextSelectedArr: string[] = [];
+    let isAnswered = false;
+
+    if (isMultipleChoiceQuestion) {
+      const currentSelected = selectedOption
+        ? selectedOption.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+      if (currentSelected.includes(optKey)) {
+        nextSelectedArr = currentSelected.filter((k) => k !== optKey);
+      } else {
+        nextSelectedArr = [...currentSelected, optKey].sort();
+      }
+      nextOptStr = nextSelectedArr.join(", ");
+      isAnswered = nextSelectedArr.length > 0;
+    } else {
+      nextOptStr = selectedOption === optKey ? "" : optKey;
+      nextSelectedArr = nextOptStr ? [nextOptStr] : [];
+      isAnswered = Boolean(nextOptStr);
+    }
+
+    setSelectedOption(nextOptStr);
+
+    setAnswersMap((prev) => ({
+      ...prev,
+      [currentQuestion.id]: {
+        ...(prev[currentQuestion.id] || { status: "NOT_VISITED" }),
+        status: isAnswered ? "ANSWERED" : "NOT_VISITED",
+        selectedOption: nextOptStr,
+      },
+    }));
+
+    saveResponseTrigger({
+      id,
+      questionId: currentQuestion.id,
+      body: {
+        action: isAnswered ? "SAVE" : "SKIP",
+        selectedOptions: nextSelectedArr,
+        selectedOption: nextOptStr,
+        option: nextOptStr || undefined,
+        answer: nextOptStr || undefined,
+        value: nextOptStr || undefined,
+        optionKey: nextOptStr || undefined,
+        savedOptionKey: nextOptStr || undefined,
+      } as any,
+    }).catch((err) => console.warn("Auto-save option error:", err));
+  };
+
   const getQuestionSectionKey = (q: any) => ((q?.sectionType || q?.sectionKey || "").toUpperCase());
 
   const sectionsList: AssessmentSectionInfo[] = React.useMemo(() => {
@@ -325,7 +652,7 @@ export const TakeAssessmentPage: React.FC = () => {
         };
       });
     }
-    const catStr = preCheckData?.categories || "MCQ , LSRW , Coding";
+    const catStr = (preCheckData?.categories || "Objective , LSRW , Coding").replace(/\bMCQ\b/gi, "Objective");
     const categoriesArray = catStr.split(",").map((c: string) => c.trim()).filter(Boolean);
     return categoriesArray.map((cat: string) => ({
       sectionKey: cat.toUpperCase(),
@@ -429,6 +756,65 @@ export const TakeAssessmentPage: React.FC = () => {
           ? saved.textResponse
           : ((currentQuestion as any).savedTextResponse || currentQuestion.textResponse || "");
       setTextAnswer(txt);
+
+      // Restore blankAnswers
+      try {
+        if (txt && (txt.startsWith("{") || txt.startsWith("["))) {
+          const parsed = JSON.parse(txt);
+          if (typeof parsed === "object" && parsed !== null) {
+            setBlankAnswers(parsed);
+          } else {
+            setBlankAnswers({ A: txt });
+          }
+        } else {
+          setBlankAnswers(txt ? { A: txt } : {});
+        }
+      } catch {
+        setBlankAnswers(txt ? { A: txt } : {});
+      }
+
+      // Restore dropSlotAnswers
+      try {
+        if (txt && (txt.startsWith("{") || txt.startsWith("["))) {
+          const parsed = JSON.parse(txt);
+          if (typeof parsed === "object" && parsed !== null) {
+            setDropSlotAnswers(parsed);
+          } else {
+            setDropSlotAnswers({});
+          }
+        } else if (opt && (opt.startsWith("{") || opt.startsWith("["))) {
+          const parsed = JSON.parse(opt);
+          if (typeof parsed === "object" && parsed !== null) {
+            setDropSlotAnswers(parsed);
+          } else {
+            setDropSlotAnswers({});
+          }
+        } else {
+          setDropSlotAnswers({});
+        }
+      } catch {
+        setDropSlotAnswers({});
+      }
+
+      let rawDragOpts: string[] = [];
+      if (currentQuestion.options && currentQuestion.options.length > 0) {
+        rawDragOpts = currentQuestion.options
+          .map((o: any) => o.optionText || o.text || o.optionKey)
+          .filter(Boolean);
+      } else {
+        rawDragOpts = ["Console", "Text style", "Manual operation"];
+      }
+
+      setShuffledOptionsByQuestion((prev) => {
+        if (prev[currentQuestion.id] && prev[currentQuestion.id].length === rawDragOpts.length) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [currentQuestion.id]: shuffleArray(rawDragOpts),
+        };
+      });
+
 
       const availableLangs =
         currentQuestion.supportedLanguages && currentQuestion.supportedLanguages.length > 0
@@ -760,33 +1146,6 @@ export const TakeAssessmentPage: React.FC = () => {
     handleFinalSubmit();
   };
 
-  const handleSelectOption = (optKey: string) => {
-    setSelectedOption(optKey);
-    if (currentQuestion) {
-      setAnswersMap((prev) => ({
-        ...prev,
-        [currentQuestion.id]: {
-          ...prev[currentQuestion.id],
-          selectedOption: optKey,
-          status: "ANSWERED",
-        },
-      }));
-
-      saveResponseTrigger({
-        id,
-        questionId: currentQuestion.id,
-        body: {
-          action: "SAVE",
-          selectedOption: optKey,
-          option: optKey,
-          answer: optKey,
-          value: optKey,
-          optionKey: optKey,
-          savedOptionKey: optKey,
-        } as any,
-      }).catch((err) => console.warn("Auto-save option error:", err));
-    }
-  };
 
   const cleanReadingWord = (w: string): string => {
     if (!w) return "";
@@ -1370,26 +1729,53 @@ export const TakeAssessmentPage: React.FC = () => {
       }
 
       const backendAction = actionType || (nextStatus === "ANSWERED" ? "SAVE" : "SKIP");
+      const navBody: any = {
+        action: backendAction,
+      };
+
+      if (isDragAndDropQuestion) {
+        const matches: Record<string, string> = {};
+        const pairs: Array<{ target: string; value: string }> = [];
+        Object.entries(dropSlotAnswers).forEach(([slotId, val]) => {
+          if (!val) return;
+          const cleanKey = slotId.replace(/^slot-/, "").replace(/[\[\]]/g, "").trim();
+          matches[`[${cleanKey}]`] = val;
+          pairs.push({ target: cleanKey, value: val });
+        });
+        navBody.matches = matches;
+        navBody.pairs = pairs;
+        navBody.textResponse = opt || Object.values(matches).join(", ");
+        navBody.selectedOption = opt || Object.values(matches).join(", ");
+      } else if (isFillInTheBlankQuestion) {
+        const blanksArr = blanksList.map((b) => blankAnswers[b.key] || "").filter(Boolean);
+        navBody.blanks = blanksArr.length > 0 ? blanksArr : Object.values(blankAnswers).filter(Boolean);
+        navBody.textResponse = blanksArr.join(", ") || (txt.startsWith("{") ? "" : txt) || undefined;
+      } else if (isMultipleChoiceQuestion) {
+        const selectedArr = (opt || "").split(",").map((s) => s.trim()).filter(Boolean);
+        navBody.selectedOptions = selectedArr;
+        navBody.selectedOption = opt || undefined;
+      } else {
+        navBody.selectedOption = opt || undefined;
+        navBody.selectedOptions = opt ? [opt] : undefined;
+        navBody.option = opt || undefined;
+        navBody.answer = opt || txt || transcriptVal || undefined;
+        navBody.value = opt || txt || undefined;
+        navBody.optionKey = opt || undefined;
+        navBody.savedOptionKey = opt || undefined;
+        navBody.textResponse = txt || undefined;
+        navBody.code = cd || undefined;
+        navBody.submittedCode = cd || undefined;
+        navBody.userCode = cd || undefined;
+        navBody.sourceCode = cd || undefined;
+        navBody.language = lang || undefined;
+        navBody.audioResponseUrl = audioUrl || undefined;
+        navBody.transcript = transcriptVal || undefined;
+      }
+
       saveResponseTrigger({
         id,
         questionId: currentQuestion.id,
-        body: {
-          action: backendAction,
-          selectedOption: opt || undefined,
-          option: opt || undefined,
-          answer: opt || txt || transcriptVal || undefined,
-          value: opt || txt || undefined,
-          optionKey: opt || undefined,
-          savedOptionKey: opt || undefined,
-          textResponse: txt || undefined,
-          code: cd || undefined,
-          submittedCode: cd || undefined,
-          userCode: cd || undefined,
-          sourceCode: cd || undefined,
-          language: lang || undefined,
-          audioResponseUrl: audioUrl || undefined,
-          transcript: transcriptVal || undefined,
-        } as any,
+        body: navBody,
       }).catch((err) => console.warn("Navigate save error:", err));
     }
 
@@ -1622,6 +2008,426 @@ export const TakeAssessmentPage: React.FC = () => {
     </Box>
   );
 
+  const renderFillInBlankQuestionText = () => {
+    if (!currentQuestion) return null;
+    const text = currentQuestion.questionText || "";
+    const regex = /(_[A-Za-z0-9]\.?_____+|\[[A-Za-z0-9]+\]|___+)/g;
+    const parts = text.split(regex);
+    let matchIdx = 0;
+
+    return (
+      <Typography sx={{ fontSize: "16px", fontWeight: 600, color: "#101828", mb: 3, lineHeight: 2.2 }}>
+        {parts.map((part, idx) => {
+          if (!part) return null;
+          const letterMatch = part.match(/_([A-Za-z0-9])\.?_____+|\[([A-Za-z0-9]+)\]/);
+          const isUnderscores = /^___+$/.test(part);
+
+          if (letterMatch || isUnderscores) {
+            const blankKey = letterMatch
+              ? (letterMatch[1] || letterMatch[2])
+              : (blanksList[matchIdx]?.key || String.fromCharCode(65 + matchIdx));
+            matchIdx++;
+
+            const val = blankAnswers[blankKey];
+            return (
+              <Box
+                component="span"
+                key={idx}
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  px: 1.25,
+                  py: 0.2,
+                  mx: 0.6,
+                  borderBottom: "2px solid #16a34a",
+                  bgcolor: val ? "#f0fdf4" : "#f8fafc",
+                  borderRadius: "4px 4px 0 0",
+                  color: val ? "#15803d" : "#64748b",
+                  fontWeight: 700,
+                  fontSize: "14.5px",
+                  minWidth: "65px",
+                  verticalAlign: "baseline",
+                }}
+              >
+                {val || `_${blankKey}_____`}
+              </Box>
+            );
+          }
+          return <React.Fragment key={idx}>{part}</React.Fragment>;
+        })}
+      </Typography>
+    );
+  };
+
+  const renderFillInTheBlankQuestion = () => {
+    if (!currentQuestion) return null;
+    return (
+      <Box>
+        {renderFillInBlankQuestionText()}
+
+        {currentQuestion.imageUrl && (
+          <Box sx={{ textAlign: "center", mb: 3 }}>
+            <Box
+              component="img"
+              src={currentQuestion.imageUrl}
+              alt="Question diagram"
+              sx={{ maxWidth: "100%", maxHeight: 220, borderRadius: "8px" }}
+            />
+          </Box>
+        )}
+
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, mb: 4 }}>
+          {blanksList.map((blank) => {
+            const currentVal = blankAnswers[blank.key] || "";
+            const isFilled = Boolean(currentVal.trim());
+            return (
+              <Box
+                key={blank.id || blank.key}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                  p: 1.25,
+                  pl: 1.75,
+                  borderRadius: "10px",
+                  border: isFilled ? "1.5px solid #16a34a" : "1px solid #e2e8f0",
+                  bgcolor: isFilled ? "#fcfdfc" : "#ffffff",
+                  boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+                  transition: "all 0.15s ease",
+                  "&:focus-within": {
+                    borderColor: "#16a34a",
+                    boxShadow: "0 0 0 3px rgba(22, 163, 74, 0.12)",
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    px: 1.25,
+                    py: 0.45,
+                    borderRadius: "6px",
+                    bgcolor: isFilled ? "#16a34a" : "#f1f5f9",
+                    color: isFilled ? "#ffffff" : "#475467",
+                    fontWeight: 700,
+                    fontSize: "12px",
+                    minWidth: 32,
+                  }}
+                >
+                  <span>{blank.key}</span>
+                </Box>
+
+                <Input
+                  type="text"
+                  textFieldProps={{
+                    placeholder: "Type the answer here . . .",
+                    value: currentVal,
+                    onChange: (e) => {
+                      const newVal = e.target.value;
+                      const nextBlanks = { ...blankAnswers, [blank.key]: newVal };
+                      setBlankAnswers(nextBlanks);
+                      const serialized = JSON.stringify(nextBlanks);
+                      setTextAnswer(serialized);
+                      const isAnswered = Object.values(nextBlanks).some((v) => v.trim());
+                      setAnswersMap((prev) => ({
+                        ...prev,
+                        [currentQuestion.id]: {
+                          ...(prev[currentQuestion.id] || { status: "NOT_VISITED" }),
+                          status: isAnswered ? "ANSWERED" : "NOT_VISITED",
+                          textResponse: serialized,
+                        },
+                      }));
+                    },
+                    onBlur: () => {
+                      if (!currentQuestion) return;
+                      const blanksArr = blanksList.map((b) => blankAnswers[b.key] || "").filter(Boolean);
+                      const isAnswered = blanksArr.length > 0;
+                      saveResponseTrigger({
+                        id,
+                        questionId: currentQuestion.id,
+                        body: {
+                          action: isAnswered ? "SAVE" : "SKIP",
+                          blanks: blanksArr.length > 0 ? blanksArr : Object.values(blankAnswers).filter(Boolean),
+                          textResponse: blanksArr.join(", ") || "",
+                        } as any,
+                      }).catch((err) => console.warn("Auto-save fill blank error:", err));
+                    },
+                    sx: {
+                      flex: 1,
+                      "& .MuiOutlinedInput-root": {
+                        border: "none",
+                        bgcolor: "transparent",
+                        fontSize: "14px",
+                        "& fieldset": { border: "none" },
+                      },
+                      "& .MuiInputBase-input": {
+                        py: 0.8,
+                        px: 1,
+                      },
+                    },
+                  }}
+                />
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+    );
+  };
+
+  const renderDragAndDropQuestionText = () => {
+    if (!currentQuestion) return null;
+    const text = currentQuestion.questionText || "";
+    const regex = /(\[\s*[^\]]*\s*\]|_____+)/g;
+    const parts = text.split(regex);
+    let slotCounter = 0;
+
+    return (
+      <Typography sx={{ fontSize: "16px", fontWeight: 600, color: "#101828", mb: 3, lineHeight: 2.2 }}>
+        {parts.map((part, idx) => {
+          if (!part) return null;
+          if (/^(\[\s*[^\]]*\s*\]|_____+)$/.test(part)) {
+            const clean = part.replace(/[\[\]_]/g, "").trim();
+            const currentSlotId = `slot-${clean || String.fromCharCode(65 + slotCounter++)}`;
+            const placedValue = dropSlotAnswers[currentSlotId];
+
+            return (
+              <Box
+                component="span"
+                key={idx}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const item = e.dataTransfer.getData("text/plain") || draggedChip;
+                  if (item) {
+                    handlePlaceChip(currentSlotId, item);
+                  }
+                }}
+                onClick={() => {
+                  if (placedValue) {
+                    handleRemovePlacedChip(currentSlotId);
+                  }
+                }}
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  verticalAlign: "middle",
+                  mx: 0.75,
+                  my: 0.5,
+                  minWidth: placedValue ? "auto" : "75px",
+                  height: "32px",
+                  px: placedValue ? 1.5 : 1.25,
+                  borderRadius: "8px",
+                  border: placedValue ? "none" : "1.5px solid #64748b",
+                  bgcolor: placedValue ? "#74c043" : "#ffffff",
+                  color: placedValue ? "#ffffff" : "#64748b",
+                  fontWeight: 600,
+                  fontSize: "13.5px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  boxShadow: placedValue ? "0 1px 2px rgba(0, 0, 0, 0.08)" : "none",
+                  transition: "all 0.15s ease",
+                  "&:hover": {
+                    bgcolor: placedValue ? "#65a30d" : "#f8fafc",
+                    borderColor: placedValue ? "transparent" : "#334155",
+                  },
+                }}
+                title={placedValue ? "Click to remove back to options" : "Drop item here or click to fill"}
+              >
+                {placedValue ? (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    <span>{placedValue}</span>
+                    <span style={{ fontSize: "16px", lineHeight: 1, opacity: 0.85 }}>×</span>
+                  </Box>
+                ) : (
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                    {clean ? `[ ${clean} ]` : ""}
+                  </span>
+                )}
+              </Box>
+            );
+          }
+          return <React.Fragment key={idx}>{part}</React.Fragment>;
+        })}
+      </Typography>
+    );
+  };
+
+  const renderDragAndDropQuestion = () => {
+    if (!currentQuestion) return null;
+    return (
+      <Box>
+        {renderDragAndDropQuestionText()}
+
+        {currentQuestion.imageUrl && (
+          <Box sx={{ textAlign: "center", mb: 3 }}>
+            <Box
+              component="img"
+              src={currentQuestion.imageUrl}
+              alt="Question diagram"
+              sx={{ maxWidth: "100%", maxHeight: 220, borderRadius: "8px" }}
+            />
+          </Box>
+        )}
+
+        <Box sx={{ mb: 4 }}>
+          <Typography sx={{ fontSize: "12.5px", color: "#64748b", fontWeight: 600, mb: 1.5 }}>
+            Drag and drop
+          </Typography>
+
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, minHeight: 44, alignItems: "center" }}>
+            {availableChips.map((chipText, cIdx) => (
+              <Box
+                key={cIdx}
+                draggable={true}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/plain", chipText);
+                  setDraggedChip(chipText);
+                }}
+                onDragEnd={() => setDraggedChip(null)}
+                onClick={() => {
+                  const emptySlot = dropSlotsList.find((s) => !dropSlotAnswers[s.id]);
+                  if (emptySlot) {
+                    handlePlaceChip(emptySlot.id, chipText);
+                  }
+                }}
+                sx={{
+                  bgcolor: "#16a34a",
+                  color: "#ffffff",
+                  borderRadius: "8px",
+                  px: 2,
+                  py: 0.65,
+                  fontSize: "13.5px",
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  cursor: "grab",
+                  userSelect: "none",
+                  boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+                  transition: "all 0.15s ease",
+                  "&:hover": {
+                    bgcolor: "#15803d",
+                    transform: "translateY(-1px)",
+                    boxShadow: "0 3px 6px rgba(0, 0, 0, 0.12)",
+                  },
+                  "&:active": {
+                    cursor: "grabbing",
+                    bgcolor: "#166534",
+                  },
+                }}
+              >
+                {chipText}
+              </Box>
+            ))}
+
+            {availableChips.length === 0 && (
+              <Typography sx={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+                All items placed. Click any placed item in the question to remove, or click Clear all.
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      </Box>
+    );
+  };
+
+  const renderMultipleChoiceQuestion = () => {
+    if (!currentQuestion) return null;
+
+    const selectedKeys = (selectedOption || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    return (
+      <>
+        <Typography sx={{ fontSize: "16px", fontWeight: 600, color: "#101828", mb: 2.5, lineHeight: 1.6 }}>
+          {currentQuestion.questionText}
+        </Typography>
+
+        {currentQuestion.imageUrl && (
+          <Box sx={{ textAlign: "center", mb: 3 }}>
+            <Box
+              component="img"
+              src={currentQuestion.imageUrl}
+              alt="Question diagram"
+              sx={{ maxWidth: "100%", maxHeight: 220, borderRadius: "8px" }}
+            />
+          </Box>
+        )}
+
+        {currentQuestion.options && currentQuestion.options.length > 0 && (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 4 }}>
+            {currentQuestion.options.map((opt: any, optIdx: number) => {
+              const optKey = opt.optionKey || opt.key || String.fromCharCode(65 + optIdx);
+              const optText = opt.optionText || opt.text || "";
+              const isSelected = isMultipleChoiceQuestion
+                ? selectedKeys.includes(optKey)
+                : selectedOption === optKey;
+
+              return (
+                <Box
+                  key={opt.id || optKey || optIdx}
+                  onClick={() => handleSelectOption(optKey)}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                    p: 1.75,
+                    px: 2,
+                    borderRadius: "10px",
+                    border: isSelected ? "1.5px solid #16a34a" : "1px solid #e2e8f0",
+                    bgcolor: isSelected ? "#ecfdf3" : "#ffffff",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    "&:hover": {
+                      bgcolor: isSelected ? "#ecfdf3" : "#f8fafc",
+                      borderColor: isSelected ? "#16a34a" : "#cbd5e1",
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      minWidth: 28,
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      bgcolor: isSelected ? "#16a34a" : "#ffffff",
+                      color: isSelected ? "#ffffff" : "#475467",
+                      border: isSelected ? "none" : "1.5px solid #d0d5dd",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    {optKey}
+                  </Box>
+                  <Typography
+                    sx={{
+                      fontSize: "14px",
+                      fontWeight: isSelected ? 600 : 400,
+                      color: "#101828",
+                    }}
+                  >
+                    {optText}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </>
+    );
+  };
+
   const handleRunCode = async () => {
     if (!currentQuestion || runsRemaining <= 0) return;
     setIsRunningCodeCustom(true);
@@ -1760,12 +2566,122 @@ export const TakeAssessmentPage: React.FC = () => {
   const handleFinalSubmit = async () => {
     try {
       await exitFullscreen();
-      const res = await submitAssessmentTrigger({ id, body: {} as any }).unwrap();
+
+      // Assemble all responses batch payload according to question types
+      const batchResponses: Record<string, any> = {};
+
+      // If current question has active state in local variables, merge into answersMap copy
+      const mergedAnswers = { ...answersMap };
+      if (currentQuestion) {
+        mergedAnswers[currentQuestion.id] = {
+          ...(mergedAnswers[currentQuestion.id] || { status: "NOT_VISITED" }),
+          selectedOption: selectedOption !== undefined ? selectedOption : mergedAnswers[currentQuestion.id]?.selectedOption,
+          textResponse: textAnswer !== undefined ? textAnswer : mergedAnswers[currentQuestion.id]?.textResponse,
+          code: codeAnswer !== undefined ? codeAnswer : mergedAnswers[currentQuestion.id]?.code,
+          language: selectedLanguage || mergedAnswers[currentQuestion.id]?.language,
+          audioResponseUrl: recordedAudioUrl || mergedAnswers[currentQuestion.id]?.audioResponseUrl,
+          transcript: liveTranscript || mergedAnswers[currentQuestion.id]?.transcript,
+        };
+      }
+
+      questionsList.forEach((q) => {
+        const qAns = mergedAnswers[q.id];
+        const qType = (q.questionType || (q as any).subtype || (q as any).subType || "").toLowerCase();
+        const isMCQ = qType.includes("multiple") || qType.includes("multi");
+        const isBlank = qType.includes("blank") || qType.includes("fill");
+        const isDrag = qType.includes("drag") || qType.includes("drop");
+        const isSingle = qType.includes("single") || qType.includes("true") || qType.includes("false");
+
+        if (isDrag) {
+          const matches: Record<string, string> = {};
+          const pairs: Array<{ target: string; value: string }> = [];
+
+          let parsedSlots: Record<string, string> = {};
+          if (q.id === currentQuestion?.id) {
+            parsedSlots = dropSlotAnswers;
+          } else if (qAns?.textResponse?.startsWith("{")) {
+            try {
+              parsedSlots = JSON.parse(qAns.textResponse);
+            } catch {}
+          }
+          Object.entries(parsedSlots).forEach(([slotId, val]) => {
+            if (!val || typeof val !== "string") return;
+            const cleanKey = slotId.replace(/^slot-/, "").replace(/[\[\]]/g, "").trim();
+            matches[`[${cleanKey}]`] = val;
+            pairs.push({ target: cleanKey, value: val });
+          });
+
+          if (Object.keys(matches).length > 0) {
+            batchResponses[q.id] = {
+              matches,
+              pairs,
+            };
+          }
+        } else if (isBlank) {
+          let blanksArr: string[] = [];
+          if (q.id === currentQuestion?.id) {
+            blanksArr = blanksList.map((b) => blankAnswers[b.key] || "").filter(Boolean);
+            if (blanksArr.length === 0) {
+              blanksArr = Object.values(blankAnswers).filter(Boolean);
+            }
+          } else if (qAns?.textResponse) {
+            try {
+              if (qAns.textResponse.startsWith("{")) {
+                const parsed = JSON.parse(qAns.textResponse);
+                blanksArr = Object.values(parsed).filter((v: any) => typeof v === "string" && v.trim()) as string[];
+              } else {
+                blanksArr = qAns.textResponse.split(",").map((s) => s.trim()).filter(Boolean);
+              }
+            } catch {
+              blanksArr = [qAns.textResponse];
+            }
+          }
+          if (blanksArr.length > 0) {
+            batchResponses[q.id] = {
+              blanks: blanksArr,
+              textResponse: blanksArr.join(", "),
+            };
+          }
+        } else if (isMCQ) {
+          const optStr = (q.id === currentQuestion?.id ? selectedOption : qAns?.selectedOption) || "";
+          const opts = optStr.split(",").map((s) => s.trim()).filter(Boolean);
+          if (opts.length > 0) {
+            batchResponses[q.id] = {
+              selectedOptions: opts,
+              selectedOption: optStr,
+            };
+          }
+        } else if (isSingle) {
+          const optStr = (q.id === currentQuestion?.id ? selectedOption : qAns?.selectedOption) || "";
+          if (optStr) {
+            batchResponses[q.id] = {
+              selectedOption: optStr,
+              selectedOptions: [optStr],
+            };
+          }
+        } else if (qAns?.code) {
+          batchResponses[q.id] = {
+            code: qAns.code,
+            language: qAns.language || "Python",
+          };
+        } else if (qAns?.audioResponseUrl || qAns?.transcript || qAns?.textResponse) {
+          batchResponses[q.id] = {
+            audioResponseUrl: qAns?.audioResponseUrl || undefined,
+            transcript: qAns?.transcript || undefined,
+            textResponse: qAns?.textResponse || undefined,
+          };
+        }
+      });
+
+      const bodyPayload = Object.keys(batchResponses).length > 0 ? { responses: batchResponses } : {};
+
+      const res = await submitAssessmentTrigger({ id, body: bodyPayload as any }).unwrap();
       const payload = (res as any)?.data ?? res;
       setSubmissionResult(payload);
       setSubmitDialogOpen(false);
       setStage("COMPLETED");
     } catch (err: any) {
+      console.error("Submission error:", err);
       await exitFullscreen();
       setSubmitDialogOpen(false);
       setStage("COMPLETED");
@@ -1780,7 +2696,11 @@ export const TakeAssessmentPage: React.FC = () => {
   });
 
   const pageTitle = sessionData?.title || preCheckData?.title || "Logical Thinking test";
-  const pageCategories = sessionData?.categories || preCheckData?.categories || "MCQ , LSRW , Coding";
+  const pageCategories = (sessionData?.categories || preCheckData?.categories || "Objective . LSRW . Coding")
+    .replace(/\bMCQ\b/gi, "Objective")
+    .replace(/,/g, " . ")
+    .replace(/\s+\.\s+/g, " . ")
+    .trim();
 
   const activeSectionInfo = sectionsList.find(
     (s) => (s?.sectionKey || "").toUpperCase() === (activeSectionKey || "").toUpperCase()
@@ -1793,8 +2713,9 @@ export const TakeAssessmentPage: React.FC = () => {
         ? `${preCheckData.totalItems} Questions`
         : "20 Questions");
 
-  const currentSecKeyUpper = (activeSectionKey || "").toUpperCase();
+  const currentSecKeyUpper = (activeSectionKey || sectionsList[0]?.sectionKey || "MCQ").toUpperCase();
   const isCurrentSectionChecked = Boolean(sectionChecksCompleted[currentSecKeyUpper]);
+  const showSessionCheck = stage === "PRE_CHECK" || !isCurrentSectionChecked;
   const activeSectionQuestions = React.useMemo(() => {
     return questionsList.filter(
       (q) => getQuestionSectionKey(q) === currentSecKeyUpper
@@ -1838,9 +2759,32 @@ export const TakeAssessmentPage: React.FC = () => {
             <Typography sx={{ fontSize: "22px", fontWeight: 700, color: "#101828" }}>
               Assessment Submitted!
             </Typography>
-            <Typography sx={{ fontSize: "13.5px", color: "#667085", mt: 1, mb: 3.5 }}>
+            <Typography sx={{ fontSize: "13.5px", color: "#667085", mt: 1, mb: submissionResult?.finalScoreAndGradeDisplay ? 2 : 3.5 }}>
               Your responses have been recorded and evaluated successfully.
             </Typography>
+
+            {submissionResult?.finalScoreAndGradeDisplay && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: "#f8fafc", borderRadius: "12px", border: "1px solid #eaecf0" }}>
+                <Typography sx={{ fontSize: "12px", color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Final Score
+                </Typography>
+                <Typography sx={{ fontSize: "20px", fontWeight: 800, color: "#101828", my: 0.5 }}>
+                  {submissionResult.finalScoreAndGradeDisplay}
+                </Typography>
+                {submissionResult.statusBadge && (
+                  <Chip
+                    label={submissionResult.statusBadge}
+                    size="small"
+                    sx={{
+                      fontWeight: 700,
+                      fontSize: "11.5px",
+                      bgcolor: submissionResult.statusBadge.toLowerCase().includes("pass") ? "#dcfce7" : "#fee2e2",
+                      color: submissionResult.statusBadge.toLowerCase().includes("pass") ? "#15803d" : "#b91c1c",
+                    }}
+                  />
+                )}
+              </Box>
+            )}
 
             <Box sx={{ display: "flex", gap: 1.5, justifyContent: "center", flexWrap: "wrap" }}>
               <Button
@@ -1880,6 +2824,98 @@ export const TakeAssessmentPage: React.FC = () => {
               </Button>
             </Box>
           </Card>
+        </Box>
+      ) : showSessionCheck ? (
+        <Box sx={{ minHeight: "100vh", bgcolor: "#f8fafc", p: { xs: 2.5, sm: 4, md: 5 } }}>
+          {/* Top-left Assessment Header */}
+          <Box sx={{ mb: { xs: 3, md: 4 } }}>
+            <Typography sx={{ fontSize: { xs: "22px", md: "26px" }, fontWeight: 700, color: "#101828" }}>
+              {pageTitle}
+            </Typography>
+            <Typography sx={{ fontSize: "14px", color: "#667085", mt: 0.5 }}>
+              {pageCategories}
+            </Typography>
+          </Box>
+
+          {/* Centered Session System Check Card */}
+          <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+            {isPreCheckLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 12 }}>
+                <CircularProgress sx={{ color: "#831843" }} />
+              </Box>
+            ) : isPreCheckError ? (
+              <Alert
+                severity="error"
+                action={
+                  <Button color="inherit" size="small" onClick={() => refetchPreCheck()}>
+                    Retry
+                  </Button>
+                }
+                sx={{ borderRadius: "10px" }}
+              >
+                Failed to load assessment pre-check. Please verify your assignment ID and retry.
+              </Alert>
+            ) : (
+              <SectionSystemCheckCard
+                sectionKey={activeSectionKey || sectionsList[0]?.sectionKey || "MCQ"}
+                sectionType={getNormalizedSessionType(activeSectionKey || sectionsList[0]?.sectionKey || "MCQ")}
+                questionCount={
+                  activeSectionQuestions.length ||
+                  (activeSectionInfo?.countDisplay ? parseInt(activeSectionInfo.countDisplay) : 0) ||
+                  preCheckData?.totalItems ||
+                  20
+                }
+                durationMinutes={
+                  activeSectionInfo?.durationMinutes ||
+                  sessionData?.durationMinutes ||
+                  preCheckData?.durationMinutes ||
+                  (getNormalizedSessionType(activeSectionKey) === "OBJECTIVE" ? 10 : 60)
+                }
+                totalMarks={
+                  activeSectionInfo?.totalMarks ||
+                  preCheckData?.totalMarks ||
+                  100
+                }
+                attemptsAllowed={preCheckData?.attemptsAllowed ?? 3}
+                beepPlayed={beepPlayed}
+                micAuthorized={micAuthorized}
+                declarationAccepted={declarationAccepted}
+                onToggleDeclaration={setDeclarationAccepted}
+                onPlayBeep={handlePlayBeep}
+                onAuthorizeMic={handleAuthorizeMic}
+                onStartSession={async () => {
+                  const currentSecUpper = (activeSectionKey || sectionsList[0]?.sectionKey || "MCQ").toUpperCase();
+                  if (stage === "PRE_CHECK") {
+                    setSectionChecksCompleted((prev) => ({
+                      ...prev,
+                      [currentSecUpper]: true,
+                    }));
+                    await handleConfirmStartTest();
+                  } else {
+                    setSectionChecksCompleted((prev) => ({
+                      ...prev,
+                      [currentSecUpper]: true,
+                    }));
+                    const idx = questionsList.findIndex(
+                      (q) => getQuestionSectionKey(q) === currentSecUpper
+                    );
+                    if (idx !== -1) navigateToQuestion(idx);
+                    void enterFullscreen();
+                  }
+                }}
+                onBack={
+                  getNormalizedSessionType(activeSectionKey) === "OBJECTIVE" || stage === "PRE_CHECK"
+                    ? () => navigate("/student/assessments")
+                    : undefined
+                }
+                isStarting={isStartingSession}
+                instructions={preCheckData?.instructions}
+                declarationText={preCheckData?.declarationText}
+                audioPlaybackLabel={preCheckData?.hardwareChecks?.audioPlaybackLabel}
+                microphoneAuthLabel={preCheckData?.hardwareChecks?.microphoneAuthLabel}
+              />
+            )}
+          </Box>
         </Box>
       ) : (
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", p: { xs: 2, md: 3 } }}>
@@ -1969,12 +3005,7 @@ export const TakeAssessmentPage: React.FC = () => {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns:
-                stage === "TEST_SESSION" && isCurrentSectionChecked && (activeSectionKey || "").toUpperCase() === "CODING"
-                  ? { xs: "1fr", lg: "260px 1fr 280px" }
-                  : stage === "TEST_SESSION"
-                    ? { xs: "1fr", lg: "260px 1fr" }
-                    : { xs: "1fr", md: "260px 1fr" },
+              gridTemplateColumns: { xs: "1fr", lg: "260px 1fr 280px", md: "260px 1fr" },
               gap: 2.5,
               alignItems: "start",
               flex: 1,
@@ -1992,7 +3023,7 @@ export const TakeAssessmentPage: React.FC = () => {
               >
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.25 }}>
                   <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>
-                    {activeSectionKey}
+                    {formatSectionDisplay(activeSectionKey)}
                   </Typography>
                   <Typography sx={{ fontSize: "11px", color: "#64748b" }}>
                     {activeSectionCountText}
@@ -2011,7 +3042,7 @@ export const TakeAssessmentPage: React.FC = () => {
                           if (isCompleted) {
                             setSnackbar({
                               open: true,
-                              message: `${sec.sectionKey} session is completed and locked.`,
+                              message: `${formatSectionDisplay(sec.sectionKey)} session is completed and locked.`,
                               severity: "warning",
                             });
                             return;
@@ -2052,7 +3083,7 @@ export const TakeAssessmentPage: React.FC = () => {
                         {isCompleted && (
                           <LockOutlinedIcon sx={{ fontSize: 13, color: "#94a3b8" }} />
                         )}
-                        <span>{sec.sectionKey}</span>
+                        <span>{formatSectionDisplay(sec.sectionKey)}</span>
                         {isCompleted ? (
                           <Chip
                             label="Completed"
@@ -2282,378 +3313,24 @@ export const TakeAssessmentPage: React.FC = () => {
             </Box>
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {stage === "PRE_CHECK" && (
-                <Box>
-                  {isPreCheckLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 12 }}>
-                      <CircularProgress sx={{ color: "#2563eb" }} />
-                    </Box>
-                  ) : isPreCheckError ? (
-                    <Alert
-                      severity="error"
-                      action={
-                        <Button color="inherit" size="small" onClick={() => refetchPreCheck()}>
-                          Retry
-                        </Button>
-                      }
-                      sx={{ borderRadius: "10px" }}
-                    >
-                      Failed to load assessment pre-check. Please verify your assignment ID and retry.
-                    </Alert>
-                  ) : (
-                    <Card
-                      elevation={0}
-                      sx={{
-                        border: "1px solid #eaecf0",
-                        borderRadius: "16px",
-                        bgcolor: "#ffffff",
-                        p: { xs: 3, sm: 4 },
-                        boxShadow: "0 4px 16px rgba(16, 24, 40, 0.05)",
-                      }}
-                    >
-                      <Typography sx={{ fontSize: "20px", fontWeight: 700, color: "#101828" }}>
-                        Communication
-                      </Typography>
-                      <Typography sx={{ fontSize: "13.5px", color: "#667085", mt: 0.5, mb: 3 }}>
-                        Please complete the hardware connectivity and audits before beginning the assessment.
-                      </Typography>
-
-                      <Box
-                        sx={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(4, 1fr)",
-                          gap: 2,
-                          mb: 3.5,
-                          p: 2,
-                          borderRadius: "12px",
-                          bgcolor: "#f8fafc",
-                          border: "1px solid #f1f5f9",
-                          textAlign: "center",
-                        }}
-                      >
-                        <Box>
-                          <Typography sx={{ fontSize: "12px", color: "#667085", fontWeight: 500 }}>Duration</Typography>
-                          <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#101828", mt: 0.25 }}>
-                            {preCheckData?.durationMinutes} min
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography sx={{ fontSize: "12px", color: "#667085", fontWeight: 500 }}>Questions</Typography>
-                          <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#101828", mt: 0.25 }}>
-                            {preCheckData?.totalItems}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography sx={{ fontSize: "12px", color: "#667085", fontWeight: 500 }}>Marks</Typography>
-                          <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#101828", mt: 0.25 }}>
-                            {preCheckData?.totalMarks}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography sx={{ fontSize: "12px", color: "#667085", fontWeight: 500 }}>Attempts</Typography>
-                          <Typography sx={{ fontSize: "18px", fontWeight: 700, color: "#101828", mt: 0.25 }}>
-                            {preCheckData?.attemptsAllowed ?? 1}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 3.5 }}>
-                        <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            p: 2,
-                            borderRadius: "10px",
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                            <VolumeUpIcon sx={{ color: "#64748b" }} />
-                            <Typography sx={{ fontSize: "13.5px", color: "#334155" }}>
-                              Sound check: Ensure audio output is clear.
-                            </Typography>
-                          </Box>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={handlePlayBeep}
-                            sx={{
-                              borderColor: beepPlayed ? "#16a34a" : "#22c55e",
-                              color: beepPlayed ? "#16a34a" : "#22c55e",
-                              textTransform: "none",
-                              fontWeight: 600,
-                              borderRadius: "6px",
-                              px: 2,
-                            }}
-                          >
-                            {beepPlayed ? "Played ✓" : preCheckData?.hardwareChecks?.audioPlaybackLabel || "Play the beep"}
-                          </Button>
-                        </Box>
-
-                        <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            p: 2,
-                            borderRadius: "10px",
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                            <MicIcon sx={{ color: "#64748b" }} />
-                            <Typography sx={{ fontSize: "13.5px", color: "#334155" }}>
-                              Microphone check: Authorize microphone access for spoken responses.
-                            </Typography>
-                          </Box>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={handleAuthorizeMic}
-                            sx={{
-                              borderColor: micAuthorized ? "#16a34a" : "#ef4444",
-                              color: micAuthorized ? "#16a34a" : "#ef4444",
-                              textTransform: "none",
-                              fontWeight: 600,
-                              borderRadius: "6px",
-                              px: 2,
-                            }}
-                          >
-                            {micAuthorized
-                              ? "Authorized ✓"
-                              : preCheckData?.hardwareChecks?.microphoneStatus === "Authorized"
-                                ? "Authorized ✓"
-                                : preCheckData?.hardwareChecks?.microphoneAuthLabel || "Authorize mic"}
-                          </Button>
-                        </Box>
-                      </Box>
-
-                      {preCheckData?.instructions && preCheckData.instructions.length > 0 && (
-                        <Box sx={{ mb: 3 }}>
-                          <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#101828", mb: 1 }}>
-                            Instructions
-                          </Typography>
-                          <Box component="ul" sx={{ pl: 2.5, m: 0, color: "#475467", fontSize: "13px", lineHeight: 1.8 }}>
-                            {preCheckData.instructions.map((inst: string, idx: number) => (
-                              <li key={idx}>{inst}</li>
-                            ))}
-                          </Box>
-                        </Box>
-                      )}
-
-                      {preCheckData?.declarationText && (
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              checked={declarationAccepted}
-                              onChange={(e) => setDeclarationAccepted(e.target.checked)}
-                              sx={{ color: "#2563eb", "&.Mui-checked": { color: "#2563eb" } }}
-                            />
-                          }
-                          label={
-                            <Typography sx={{ fontSize: "13px", color: "#344054" }}>
-                              {preCheckData.declarationText}
-                            </Typography>
-                          }
-                          sx={{ mb: 3.5 }}
-                        />
-                      )}
-
-                      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-                        <Button
-                          variant="contained"
-                          disabled={Boolean(preCheckData?.declarationText && !declarationAccepted)}
-                          onClick={() => setStage("SYSTEM_CHECK")}
-                          sx={{
-                            bgcolor: "#2563eb",
-                            color: "#ffffff",
-                            px: 3.5,
-                            py: 1,
-                            fontWeight: 600,
-                            textTransform: "none",
-                            borderRadius: "8px",
-                            "&:hover": { bgcolor: "#1d4ed8" },
-                          }}
-                        >
-                          Continue to system check
-                        </Button>
-                      </Box>
-                    </Card>
-                  )}
+              {isSessionLoading ? (
+                <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 16 }}>
+                  <CircularProgress sx={{ color: "#831843" }} />
                 </Box>
-              )}
-
-              {stage === "SYSTEM_CHECK" && (
-                <Card
-                  elevation={0}
-                  sx={{
-                    border: "1px solid #eaecf0",
-                    borderRadius: "16px",
-                    bgcolor: "#ffffff",
-                    p: 4,
-                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)",
-                  }}
+              ) : isSessionError ? (
+                <Alert
+                  severity="error"
+                  action={
+                    <Button color="inherit" size="small" onClick={() => refetchSession()}>
+                      Retry
+                    </Button>
+                  }
+                  sx={{ borderRadius: "10px" }}
                 >
-                  <Typography sx={{ fontSize: "20px", fontWeight: 700, color: "#101828" }}>
-                    System check
-                  </Typography>
-                  <Typography sx={{ fontSize: "13.5px", color: "#667085", mt: 0.5, mb: 3.5 }}>
-                    Making sure your device is ready for a timed test.
-                  </Typography>
-
-                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, mb: 4 }}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        p: 1.75,
-                        borderRadius: "10px",
-                        border: "1px solid #f1f5f9",
-                        bgcolor: "#f8fafc",
-                      }}
-                    >
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                        <WifiIcon sx={{ fontSize: 20, color: "#64748b" }} />
-                        <Typography sx={{ fontSize: "13.5px", color: "#334155", fontWeight: 500 }}>
-                          Network connection stable
-                        </Typography>
-                      </Box>
-                      <CheckIcon
-                        sx={{
-                          fontSize: 20,
-                          color:
-                            preCheckData?.systemChecks?.networkConnectionStable !== false
-                              ? "#16a34a"
-                              : "#dc2626",
-                        }}
-                      />
-                    </Box>
-
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        p: 1.75,
-                        borderRadius: "10px",
-                        border: "1px solid #f1f5f9",
-                        bgcolor: "#f8fafc",
-                      }}
-                    >
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                        <DesktopWindowsIcon sx={{ fontSize: 20, color: "#64748b" }} />
-                        <Typography sx={{ fontSize: "13.5px", color: "#334155", fontWeight: 500 }}>
-                          Browser supported
-                        </Typography>
-                      </Box>
-                      <CheckIcon
-                        sx={{
-                          fontSize: 20,
-                          color:
-                            preCheckData?.systemChecks?.browserSupported !== false ? "#16a34a" : "#dc2626",
-                        }}
-                      />
-                    </Box>
-
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        p: 1.75,
-                        borderRadius: "10px",
-                        border: "1px solid #f1f5f9",
-                        bgcolor: "#f8fafc",
-                      }}
-                    >
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                        <AccessTimeIcon sx={{ fontSize: 20, color: "#64748b" }} />
-                        <Typography sx={{ fontSize: "13.5px", color: "#334155", fontWeight: 500 }}>
-                          Clock synchronized
-                        </Typography>
-                      </Box>
-                      <CheckIcon
-                        sx={{
-                          fontSize: 20,
-                          color:
-                            preCheckData?.systemChecks?.clockSynchronized !== false ? "#16a34a" : "#dc2626",
-                        }}
-                      />
-                    </Box>
-                  </Box>
-
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Button
-                      variant="outlined"
-                      onClick={() => setStage("PRE_CHECK")}
-                      sx={{ textTransform: "none", color: "#64748b", borderColor: "#d0d5dd", borderRadius: "8px" }}
-                    >
-                      Back
-                    </Button>
-
-                    <Button
-                      variant="contained"
-                      disabled={isStartingSession}
-                      onClick={handleConfirmStartTest}
-                      sx={{
-                        bgcolor: "#2563eb",
-                        color: "#ffffff",
-                        px: 3,
-                        py: 1,
-                        fontWeight: 600,
-                        textTransform: "none",
-                        borderRadius: "8px",
-                        "&:hover": { bgcolor: "#1d4ed8" },
-                      }}
-                    >
-                      {isStartingSession ? "Starting..." : "Start test"}
-                    </Button>
-                  </Box>
-                </Card>
-              )}
-
-              {stage === "TEST_SESSION" && (
-                <Box>
-                  {isSessionLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 16 }}>
-                      <CircularProgress sx={{ color: "#2563eb" }} />
-                    </Box>
-                  ) : isSessionError ? (
-                    <Alert
-                      severity="error"
-                      action={
-                        <Button color="inherit" size="small" onClick={() => refetchSession()}>
-                          Retry
-                        </Button>
-                      }
-                      sx={{ borderRadius: "10px" }}
-                    >
-                      Failed to load test session. Please retry or contact support.
-                    </Alert>
-                  ) : !isCurrentSectionChecked ? (
-                    <SectionSystemCheckCard
-                      sectionKey={activeSectionKey || "MCQ"}
-                      sectionType={getNormalizedSessionType(activeSectionKey)}
-                      questionCount={activeSectionQuestions.length || 1}
-                      totalMarks={preCheckData?.totalMarks}
-                      beepPlayed={beepPlayed}
-                      micAuthorized={micAuthorized}
-                      onPlayBeep={handlePlayBeep}
-                      onAuthorizeMic={handleAuthorizeMic}
-                      onStartSession={() => {
-                        setSectionChecksCompleted((prev) => ({
-                          ...prev,
-                          [currentSecKeyUpper]: true,
-                        }));
-                        void enterFullscreen();
-                      }}
-                      audioPlaybackLabel={preCheckData?.hardwareChecks?.audioPlaybackLabel}
-                      microphoneAuthLabel={preCheckData?.hardwareChecks?.microphoneAuthLabel}
-                    />
-                  ) : (
-                    <Card
+                  Failed to load test session. Please retry or contact support.
+                </Alert>
+              ) : (
+                <Card
                       elevation={0}
                       sx={{
                         border: "1px solid #eaecf0",
@@ -2682,7 +3359,7 @@ export const TakeAssessmentPage: React.FC = () => {
                               {questionsList.length > 0 && ` of ${questionsList.length}`}
                             </Typography>
                             <Chip
-                              label={getQuestionSectionKey(currentQuestion) || activeSectionKey}
+                              label={formatSectionDisplay(getQuestionSectionKey(currentQuestion) || activeSectionKey)}
                               size="small"
                               sx={{
                                 height: 22,
@@ -2766,79 +3443,21 @@ export const TakeAssessmentPage: React.FC = () => {
                         </Box>
                       )}
 
-                      {getQuestionSectionKey(currentQuestion) === "MCQ" && currentQuestion && (
+                      {(getQuestionSectionKey(currentQuestion) === "MCQ" ||
+                        getQuestionSectionKey(currentQuestion) === "OBJECTIVE" ||
+                        !["LSRW", "CODING"].includes(getQuestionSectionKey(currentQuestion))) &&
+                        currentQuestion && (
                         <Box>
                           {currentQuestion.audioPromptUrl && renderAudioPromptPlayer(isCurrentAudioFinished)}
 
                           {currentQuestion.audioPromptUrl && !isCurrentAudioFinished ? (
                             renderAudioLockedPlaceholder()
+                          ) : isFillInTheBlankQuestion ? (
+                            renderFillInTheBlankQuestion()
+                          ) : isDragAndDropQuestion ? (
+                            renderDragAndDropQuestion()
                           ) : (
-                            <>
-                              <Typography sx={{ fontSize: "16px", fontWeight: 600, color: "#101828", mb: 2 }}>
-                                {currentQuestion.questionText}
-                              </Typography>
-
-                              {currentQuestion.imageUrl && (
-                                <Box sx={{ textAlign: "center", mb: 3 }}>
-                                  <Box
-                                    component="img"
-                                    src={currentQuestion.imageUrl}
-                                    alt="Question diagram"
-                                    sx={{ maxWidth: "100%", maxHeight: 220, borderRadius: "8px" }}
-                                  />
-                                </Box>
-                              )}
-
-                              {currentQuestion.options && currentQuestion.options.length > 0 && (
-                                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 4 }}>
-                                  {currentQuestion.options.map((opt: any, optIdx: number) => {
-                                    const optKey = opt.optionKey || opt.key || String.fromCharCode(65 + optIdx);
-                                    const optText = opt.optionText || opt.text || "";
-                                    const isSelected = Boolean(selectedOption && selectedOption === optKey);
-                                    return (
-                                      <Box
-                                        key={opt.id || optKey || optIdx}
-                                        onClick={() => handleSelectOption(optKey)}
-                                        sx={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: 2,
-                                          p: 1.75,
-                                          borderRadius: "10px",
-                                          border: isSelected ? "1.5px solid #16a34a" : "1px solid #e2e8f0",
-                                          bgcolor: isSelected ? "#ecfdf3" : "#ffffff",
-                                          cursor: "pointer",
-                                          transition: "all 0.15s ease",
-                                          "&:hover": {
-                                            bgcolor: isSelected ? "#ecfdf3" : "#f8fafc",
-                                          },
-                                        }}
-                                      >
-                                        <Box
-                                          sx={{
-                                            width: 26,
-                                            height: 26,
-                                            borderRadius: "6px",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            fontSize: "12px",
-                                            fontWeight: 700,
-                                            bgcolor: isSelected ? "#16a34a" : "#f1f5f9",
-                                            color: isSelected ? "#ffffff" : "#475467",
-                                          }}
-                                        >
-                                          {optKey}
-                                        </Box>
-                                        <Typography sx={{ fontSize: "14px", fontWeight: isSelected ? 600 : 400, color: "#101828" }}>
-                                          {optText}
-                                        </Typography>
-                                      </Box>
-                                    );
-                                  })}
-                                </Box>
-                              )}
-                            </>
+                            renderMultipleChoiceQuestion()
                           )}
                         </Box>
                       )}
@@ -3594,37 +4213,62 @@ export const TakeAssessmentPage: React.FC = () => {
                       >
                         <Button
                           variant="text"
-                          disabled={true}
-                          onClick={() => { }}
+                          disabled={currentQuestionIndex === 0}
+                          onClick={() => {
+                            if (currentQuestionIndex > 0) {
+                              navigateToQuestion(currentQuestionIndex - 1);
+                            }
+                          }}
                           startIcon={<ArrowBackIosNewRoundedIcon sx={{ fontSize: 13 }} />}
                           sx={{
                             textTransform: "none",
-                            color: "#94a3b8 !important",
+                            color: currentQuestionIndex === 0 ? "#94a3b8 !important" : "#475467",
                             fontWeight: 600,
-                            cursor: "not-allowed !important",
-                            opacity: 0.5,
+                            cursor: currentQuestionIndex === 0 ? "not-allowed !important" : "pointer",
+                            opacity: currentQuestionIndex === 0 ? 0.5 : 1,
+                            "&:hover": {
+                              bgcolor: currentQuestionIndex === 0 ? "transparent" : "#f1f5f9",
+                            },
                           }}
                         >
                           Previous
                         </Button>
 
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={() => navigateToQuestion(currentQuestionIndex + 1, "FLAG")}
-                            sx={{ textTransform: "none", color: "#64748b", borderColor: "#d0d5dd", borderRadius: "6px" }}
-                          >
-                            Flag
-                          </Button>
+                          {(isDragAndDropQuestion || isFillInTheBlankQuestion) && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={handleClearAll}
+                              sx={{
+                                textTransform: "none",
+                                color: "#475467",
+                                borderColor: "#d0d5dd",
+                                borderRadius: "6px",
+                                fontWeight: 600,
+                                px: 2,
+                                "&:hover": { bgcolor: "#f8fafc", borderColor: "#94a3b8" },
+                              }}
+                            >
+                              Clear all
+                            </Button>
+                          )}
 
                           <Button
                             variant="outlined"
                             size="small"
-                            onClick={() => navigateToQuestion(currentQuestionIndex + 1, "SKIP")}
-                            sx={{ textTransform: "none", color: "#64748b", borderColor: "#d0d5dd", borderRadius: "6px" }}
+                            onClick={() => navigateToQuestion(currentQuestionIndex + 1, "FLAG")}
+                            sx={{
+                              textTransform: "none",
+                              color: "#475467",
+                              borderColor: "#d0d5dd",
+                              borderRadius: "6px",
+                              fontWeight: 600,
+                              px: 2,
+                              "&:hover": { bgcolor: "#f8fafc", borderColor: "#94a3b8" },
+                            }}
                           >
-                            Skip
+                            Flag
                           </Button>
 
                           {(activeSectionKey || "").toUpperCase() === "CODING" && (
@@ -3656,71 +4300,105 @@ export const TakeAssessmentPage: React.FC = () => {
                               textTransform: "none",
                               fontWeight: 600,
                               borderRadius: "6px",
-                              px: 2,
+                              px: 2.2,
                               "&:hover": { bgcolor: "#1d4ed8" },
                             }}
                           >
-                            {currentQuestionIndex === questionsList.length - 1 ? "Save & Finish" : "Next question"}
+                            {currentQuestionIndex === questionsList.length - 1 ? "Save & Finish" : "Next"}
                           </Button>
                         </Box>
                       </Box>
                     </Card>
                   )}
-                </Box>
-              )}
             </Box>
 
-            {stage === "TEST_SESSION" && isCurrentSectionChecked && (activeSectionKey || "").toUpperCase() === "CODING" && (
-              <Card
-                elevation={0}
-                sx={{
-                  border: "1px solid #eaecf0",
-                  borderRadius: "14px",
-                  bgcolor: "#ffffff",
-                  p: 2.5,
-                  boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
-                }}
-              >
-                <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#101828", mb: 1 }}>
-                  Description
-                </Typography>
-                {currentQuestion?.description && (
-                  <Typography sx={{ fontSize: "12.5px", color: "#475467", lineHeight: 1.6, mb: 2.5 }}>
-                    {currentQuestion.description}
+            {(
+              (activeSectionKey || "").toUpperCase() === "CODING" ? (
+                <Card
+                  elevation={0}
+                  sx={{
+                    border: "1px solid #eaecf0",
+                    borderRadius: "14px",
+                    bgcolor: "#ffffff",
+                    p: 2.5,
+                    boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+                  }}
+                >
+                  <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#101828", mb: 1 }}>
+                    Description
                   </Typography>
-                )}
+                  {currentQuestion?.description && (
+                    <Typography sx={{ fontSize: "12.5px", color: "#475467", lineHeight: 1.6, mb: 2.5 }}>
+                      {currentQuestion.description}
+                    </Typography>
+                  )}
 
-                {(activeSectionKey || "").toUpperCase() === "CODING" && currentQuestion && (
-                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 1, borderTop: "1px solid #f1f5f9" }}>
-                    {currentQuestion.inputFormat && (
-                      <Box>
-                        <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>Input</Typography>
-                        <Typography sx={{ fontSize: "12px", color: "#64748b" }}>
-                          {currentQuestion.inputFormat}
-                        </Typography>
-                      </Box>
-                    )}
+                  {(activeSectionKey || "").toUpperCase() === "CODING" && currentQuestion && (
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 1, borderTop: "1px solid #f1f5f9" }}>
+                      {currentQuestion.inputFormat && (
+                        <Box>
+                          <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>Input</Typography>
+                          <Typography sx={{ fontSize: "12px", color: "#64748b" }}>
+                            {currentQuestion.inputFormat}
+                          </Typography>
+                        </Box>
+                      )}
 
-                    {currentQuestion.outputFormat && (
-                      <Box>
-                        <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>Output</Typography>
-                        <Typography sx={{ fontSize: "12px", color: "#64748b" }}>
-                          {currentQuestion.outputFormat}
-                        </Typography>
-                      </Box>
-                    )}
+                      {currentQuestion.outputFormat && (
+                        <Box>
+                          <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>Output</Typography>
+                          <Typography sx={{ fontSize: "12px", color: "#64748b" }}>
+                            {currentQuestion.outputFormat}
+                          </Typography>
+                        </Box>
+                      )}
 
-                    {currentQuestion.constraints && (
-                      <Box>
-                        <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>Constraints</Typography>
-                        <Typography sx={{ fontSize: "12px", color: "#64748b", fontFamily: "monospace" }}>
-                          {currentQuestion.constraints}
-                        </Typography>
-                      </Box>
-                    )}
+                      {currentQuestion.constraints && (
+                        <Box>
+                          <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#101828" }}>Constraints</Typography>
+                          <Typography sx={{ fontSize: "12px", color: "#64748b", fontFamily: "monospace" }}>
+                            {currentQuestion.constraints}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                </Card>
+              ) : (
+                <Card
+                  elevation={0}
+                  sx={{
+                    border: "1px solid #eaecf0",
+                    borderRadius: "14px",
+                    bgcolor: "#ffffff",
+                    p: 2.5,
+                    boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 3,
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#101828", mb: 1 }}>
+                      Description
+                    </Typography>
+                    <Typography sx={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.6 }}>
+                      {currentQuestion?.description ||
+                        currentQuestion?.explanation ||
+                        `This question evaluates the fundamentals of ${currentQuestion?.subSkill || "analytical thinking and problem solving"} specifically focusing on core principles. It tests a student's ability to handle practical concepts and understand relative dimensions.`}
+                    </Typography>
                   </Box>
-                )}
-              </Card>
+
+                  <Box sx={{ pt: 2, borderTop: "1px solid #f1f5f9" }}>
+                    <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#101828", mb: 1 }}>
+                      Instruction
+                    </Typography>
+                    <Typography sx={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.6 }}>
+                      {getQuestionInstruction()}
+                    </Typography>
+                  </Box>
+                </Card>
+              )
             )}
           </Box>
         </Box>

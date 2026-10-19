@@ -35,6 +35,7 @@ import {
   RateReviewOutlined as RateReviewOutlinedIcon,
   AutoFixHigh as AutoFixHighIcon,
   FactCheck as FactCheckIcon,
+  DragIndicator as DragIndicatorIcon,
 } from "@mui/icons-material";
 
 import Card from "../../components/common/Card";
@@ -148,7 +149,7 @@ export const AssessmentResultDetailPage: React.FC = () => {
     window.print();
   };
 
-  const [paletteFilter, setPaletteFilter] = useState<"all" | "wrong" | "skipped">("all");
+  const [paletteFilter, setPaletteFilter] = useState<"all" | "wrong" | "partial" | "skipped">("all");
 
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
 
@@ -478,13 +479,18 @@ export const AssessmentResultDetailPage: React.FC = () => {
   };
 
   const allCount = data?.paletteFilters?.all ?? questions.length;
+  const partialCount =
+    data?.paletteFilters?.partial ??
+    data?.paletteFilters?.partiallyCorrect ??
+    data?.partiallyCorrectQuestions ??
+    questions.filter((q) => q.status === "PARTIALLY_CORRECT").length;
   const wrongCount =
     data?.paletteFilters?.wrong ??
+    data?.wrongQuestions ??
     questions.filter(
       (q) =>
         q.status === "WRONG" ||
-        q.status === "INCORRECT" ||
-        q.status === "PARTIALLY_CORRECT"
+        q.status === "INCORRECT"
     ).length;
   const skippedCount =
     data?.paletteFilters?.skipped ??
@@ -496,7 +502,11 @@ export const AssessmentResultDetailPage: React.FC = () => {
     ).length;
 
   const mcqQuestions = useMemo(
-    () => questions.filter((q) => (q.category || "").toUpperCase() === "MCQ"),
+    () =>
+      questions.filter((q) => {
+        const cat = (q.category || "").toUpperCase();
+        return cat === "MCQ" || cat === "OBJECTIVE";
+      }),
     [questions]
   );
   const codingQuestions = useMemo(
@@ -534,9 +544,11 @@ export const AssessmentResultDetailPage: React.FC = () => {
     if (paletteFilter === "wrong") {
       return (
         q.status === "WRONG" ||
-        q.status === "INCORRECT" ||
-        q.status === "PARTIALLY_CORRECT"
+        q.status === "INCORRECT"
       );
+    }
+    if (paletteFilter === "partial") {
+      return q.status === "PARTIALLY_CORRECT";
     }
     if (paletteFilter === "skipped") {
       return (
@@ -588,6 +600,514 @@ export const AssessmentResultDetailPage: React.FC = () => {
       badgeBg: "#f1f5f9",
       badgeText: "#64748b",
     };
+  };
+
+  const isDragDropQuestion = (q?: StudentQuestionEvaluation): boolean => {
+    if (!q) return false;
+    return Boolean(
+      q.questionType?.toUpperCase() === "DRAG_AND_DROP" ||
+      q.questionType?.toLowerCase().includes("drag") ||
+      Boolean((q as any).dragDropSlots) ||
+      (q.questionText &&
+        (q.questionText.includes("[blank") ||
+          q.questionText.includes("Drag and drop") ||
+          (q.questionOrder === 1 && q.questionText.includes("Calculation method"))))
+    );
+  };
+
+  const renderDragAndDropResult = (q: StudentQuestionEvaluation) => {
+    // 1. Build map of options by key
+    const optionsByKey: Record<string, any> = {};
+    if (Array.isArray(q.options)) {
+      q.options.forEach((opt) => {
+        const key = (opt.optionKey || "").trim().toUpperCase();
+        if (key) {
+          optionsByKey[key] = opt;
+        }
+      });
+    }
+
+    // 2. Parse student answers: e.g. "[A] -> branch (Correct), [B] -> status (Incorrect), [C] -> commit (Incorrect)"
+    const studentSlotMap: Record<string, { value: string; isCorrect: boolean }> = {};
+    if (q.studentAnswer) {
+      const regex = /(?:\[([A-Za-z0-9_\s]+)\]|Blank\s*([0-9]+)|([A-Za-z0-9_]+))\s*(?:->|:)\s*(.*?)\s*\((Correct|Incorrect)\)/gi;
+      let m;
+      while ((m = regex.exec(q.studentAnswer)) !== null) {
+        const key = (m[1] || m[2] || m[3] || "").trim().toUpperCase();
+        const val = (m[4] || "").trim();
+        const isCor = (m[5] || "").toLowerCase() === "correct";
+        studentSlotMap[key] = { value: val, isCorrect: isCor };
+      }
+    }
+
+    // Check options labels for "Student placed: ..." or "Correct match for [A]"
+    if (Array.isArray(q.options)) {
+      q.options.forEach((opt) => {
+        const key = (opt.optionKey || "").trim().toUpperCase();
+        if (!studentSlotMap[key]) {
+          if (opt.label && /Student placed:\s*(.*)/i.test(opt.label)) {
+            const placed = opt.label.match(/Student placed:\s*(.*)/i)?.[1]?.trim() || "";
+            studentSlotMap[key] = {
+              value: placed,
+              isCorrect: placed.toLowerCase() === (opt.optionText || "").trim().toLowerCase(),
+            };
+          } else if (opt.label && /Correct match/i.test(opt.label)) {
+            studentSlotMap[key] = {
+              value: opt.optionText || "",
+              isCorrect: true,
+            };
+          } else if (opt.isStudentAnswer) {
+            studentSlotMap[key] = {
+              value: opt.optionText || "",
+              isCorrect: Boolean(opt.isCorrect),
+            };
+          }
+        }
+      });
+    }
+
+    // 3. Build correct slot map
+    const correctSlotMap: Record<string, string> = {};
+    Object.keys(optionsByKey).forEach((key) => {
+      correctSlotMap[key] = optionsByKey[key].optionText || "";
+    });
+
+    if (q.correctAnswer) {
+      const corRegex = /(?:\[([A-Za-z0-9_\s]+)\]|Blank\s*([0-9]+)|([A-Za-z0-9_]+))\s*(?:->|:)\s*(.*?)(?:,|$)/gi;
+      let cm;
+      while ((cm = corRegex.exec(q.correctAnswer)) !== null) {
+        const key = (cm[1] || cm[2] || cm[3] || "").trim().toUpperCase();
+        const val = (cm[4] || "").trim();
+        if (!correctSlotMap[key] || correctSlotMap[key] === "") {
+          const optMatch = val.match(/Option\s*([A-Za-z0-9_]+)/i);
+          if (optMatch && optionsByKey[optMatch[1].toUpperCase()]) {
+            correctSlotMap[key] = optionsByKey[optMatch[1].toUpperCase()].optionText;
+          } else {
+            correctSlotMap[key] = val;
+          }
+        }
+      }
+    }
+
+    // 4. Split questionText into instruction and lines
+    const fullText = (q.questionText || "").trim();
+    let introPrompt = "";
+    let sentencesText = fullText;
+
+    const colonIdx = fullText.indexOf(":");
+    if (colonIdx !== -1) {
+      const beforeColon = fullText.substring(0, colonIdx + 1).trim();
+      const afterColon = fullText.substring(colonIdx + 1).trim();
+      if (!/\[[A-Za-z0-9_\s]+\]/.test(beforeColon) && /\[[A-Za-z0-9_\s]+\]/.test(afterColon)) {
+        introPrompt = beforeColon;
+        sentencesText = afterColon;
+      }
+    }
+
+    // Determine lines
+    let lines: string[] = [];
+    if (sentencesText.includes("\n")) {
+      lines = sentencesText.split("\n").map((l) => l.trim()).filter(Boolean);
+    } else {
+      const splitClauses = sentencesText
+        .split(/(?:,\s*(?:and\s+)?(?=[A-Za-z0-9_]+\s*\[)|,\s*(?:while\s+)?(?=git\s*\[)|;\s*)/gi)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (splitClauses.length > 1) {
+        lines = splitClauses;
+      } else {
+        lines = [sentencesText];
+      }
+    }
+
+    const hasSlots = /\[[A-Za-z0-9_\s]+\]/.test(sentencesText);
+
+    // Fallback default slots if text has no bracket slots and no dragDropSlots
+    const defaultSlots = [
+      {
+        beforeText: "Which",
+        studentAnswer: "Symbol",
+        correctAnswer: "Symbol",
+        isCorrect: true,
+      },
+      {
+        beforeText: "Calculation method is converted into coding to",
+        studentAnswer: "Console",
+        correctAnswer: "Console",
+        isCorrect: true,
+      },
+      {
+        beforeText: "Calculation method Calculation into coding to",
+        studentAnswer: "Manual operation",
+        correctAnswer: "Text style",
+        isCorrect: false,
+      },
+      {
+        beforeText: "Which",
+        studentAnswer: "Text style",
+        correctAnswer: "Manual operation",
+        isCorrect: false,
+      },
+    ];
+
+    const isFallback = !hasSlots && !(q as any).dragDropSlots;
+
+    return (
+      <Box sx={{ mt: 0.5, mb: 3 }}>
+        {introPrompt && (
+          <Typography
+            sx={{
+              fontSize: "15px",
+              fontWeight: 600,
+              color: "#0f172a",
+              lineHeight: 1.6,
+              mb: 2.5,
+            }}
+          >
+            {introPrompt}
+          </Typography>
+        )}
+
+        {/* Your answer section */}
+        <Box sx={{ mb: 3.5 }}>
+          <Typography
+            sx={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "#64748b",
+              mb: 1.5,
+            }}
+          >
+            Your answer
+          </Typography>
+
+          {isFallback ? (
+            <>
+              {/* Line 1 */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  mb: 1.5,
+                  lineHeight: 2,
+                }}
+              >
+                {defaultSlots.slice(0, 2).map((slot, idx) => (
+                  <React.Fragment key={idx}>
+                    <span>{slot.beforeText}</span>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: slot.isCorrect ? "#16a34a" : "#dc2626",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        borderRadius: "6px",
+                        px: 1.3,
+                        py: 0.35,
+                        mx: 0.8,
+                        verticalAlign: "middle",
+                        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+                      }}
+                    >
+                      {slot.studentAnswer}
+                    </Box>
+                    {idx === 0 && <span> </span>}
+                  </React.Fragment>
+                ))}
+              </Box>
+
+              {/* Line 2 */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  lineHeight: 2,
+                }}
+              >
+                {defaultSlots.slice(2, 4).map((slot, idx) => (
+                  <React.Fragment key={idx}>
+                    <span>{slot.beforeText}</span>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: slot.isCorrect ? "#16a34a" : "#dc2626",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        borderRadius: "6px",
+                        px: 1.3,
+                        py: 0.35,
+                        mx: 0.8,
+                        verticalAlign: "middle",
+                        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+                      }}
+                    >
+                      {slot.studentAnswer}
+                    </Box>
+                    {idx === 0 && <span> </span>}
+                  </React.Fragment>
+                ))}
+              </Box>
+            </>
+          ) : (
+            lines.map((line, lineIdx) => {
+              const tokens = line.split(/(\[[A-Za-z0-9_\s]+\])/g).filter(Boolean);
+              return (
+                <Box
+                  key={lineIdx}
+                  sx={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    color: "#0f172a",
+                    mb: 1.5,
+                    lineHeight: 2,
+                  }}
+                >
+                  {tokens.map((token, tokenIdx) => {
+                    const match = token.match(/^\[([A-Za-z0-9_\s]+)\]$/);
+                    if (match) {
+                      const rawKey = match[1].trim();
+                      const key = rawKey.toUpperCase();
+                      const studentData = studentSlotMap[key] || studentSlotMap[rawKey];
+                      const correctVal = correctSlotMap[key] || optionsByKey[key]?.optionText || rawKey;
+                      const studentVal =
+                        studentData?.value ||
+                        (optionsByKey[key]?.isStudentAnswer ? optionsByKey[key]?.optionText : "(Not answered)");
+                      const isMatch =
+                        studentData?.isCorrect ??
+                        (studentVal.trim().toLowerCase() === correctVal.trim().toLowerCase());
+                      const chipBg = isMatch ? "#16a34a" : "#dc2626";
+
+                      return (
+                        <Box
+                          key={tokenIdx}
+                          component="span"
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            bgcolor: chipBg,
+                            color: "#ffffff",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                            borderRadius: "6px",
+                            px: 1.3,
+                            py: 0.35,
+                            mx: 0.8,
+                            verticalAlign: "middle",
+                            boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+                          }}
+                        >
+                          {studentVal}
+                        </Box>
+                      );
+                    }
+                    return (
+                      <Typography
+                        key={tokenIdx}
+                        component="span"
+                        sx={{
+                          fontSize: "15px",
+                          fontWeight: 700,
+                          color: "#0f172a",
+                          lineHeight: 2,
+                        }}
+                      >
+                        {token}
+                      </Typography>
+                    );
+                  })}
+                </Box>
+              );
+            })
+          )}
+        </Box>
+
+        {/* Correct answer section */}
+        <Box sx={{ mt: 3.5 }}>
+          <Typography
+            sx={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "#16a34a",
+              mb: 1.5,
+            }}
+          >
+            Correct answer
+          </Typography>
+
+          {isFallback ? (
+            <>
+              {/* Line 1 */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  mb: 1.5,
+                  lineHeight: 2,
+                }}
+              >
+                {defaultSlots.slice(0, 2).map((slot, idx) => (
+                  <React.Fragment key={idx}>
+                    <span>{slot.beforeText}</span>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: "#16a34a",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        borderRadius: "6px",
+                        px: 1.3,
+                        py: 0.35,
+                        mx: 0.8,
+                        verticalAlign: "middle",
+                        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+                      }}
+                    >
+                      {slot.correctAnswer}
+                    </Box>
+                    {idx === 0 && <span> </span>}
+                  </React.Fragment>
+                ))}
+              </Box>
+
+              {/* Line 2 */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  lineHeight: 2,
+                }}
+              >
+                {defaultSlots.slice(2, 4).map((slot, idx) => (
+                  <React.Fragment key={idx}>
+                    <span>{slot.beforeText}</span>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: "#16a34a",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        borderRadius: "6px",
+                        px: 1.3,
+                        py: 0.35,
+                        mx: 0.8,
+                        verticalAlign: "middle",
+                        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+                      }}
+                    >
+                      {slot.correctAnswer}
+                    </Box>
+                    {idx === 0 && <span> </span>}
+                  </React.Fragment>
+                ))}
+              </Box>
+            </>
+          ) : (
+            lines.map((line, lineIdx) => {
+              const tokens = line.split(/(\[[A-Za-z0-9_\s]+\])/g).filter(Boolean);
+              return (
+                <Box
+                  key={lineIdx}
+                  sx={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    color: "#0f172a",
+                    mb: 1.5,
+                    lineHeight: 2,
+                  }}
+                >
+                  {tokens.map((token, tokenIdx) => {
+                    const match = token.match(/^\[([A-Za-z0-9_\s]+)\]$/);
+                    if (match) {
+                      const rawKey = match[1].trim();
+                      const key = rawKey.toUpperCase();
+                      const correctVal = correctSlotMap[key] || optionsByKey[key]?.optionText || rawKey;
+
+                      return (
+                        <Box
+                          key={tokenIdx}
+                          component="span"
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            bgcolor: "#16a34a",
+                            color: "#ffffff",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                            borderRadius: "6px",
+                            px: 1.3,
+                            py: 0.35,
+                            mx: 0.8,
+                            verticalAlign: "middle",
+                            boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+                          }}
+                        >
+                          {correctVal}
+                        </Box>
+                      );
+                    }
+                    return (
+                      <Typography
+                        key={tokenIdx}
+                        component="span"
+                        sx={{
+                          fontSize: "15px",
+                          fontWeight: 700,
+                          color: "#0f172a",
+                          lineHeight: 2,
+                        }}
+                      >
+                        {token}
+                      </Typography>
+                    );
+                  })}
+                </Box>
+              );
+            })
+          )}
+        </Box>
+      </Box>
+    );
   };
 
   const toggleTestCaseAccordion = (index: number) => {
@@ -983,7 +1503,7 @@ export const AssessmentResultDetailPage: React.FC = () => {
               <Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
                   <Typography sx={{ fontSize: "12.5px", fontWeight: 600, color: "#1e293b" }}>
-                    MCQ {data.mcqQuestionsCount ?? mcqQuestions.length} questions
+                    Objective {data.mcqQuestionsCount ?? mcqQuestions.length} questions
                   </Typography>
                   <Typography sx={{ fontSize: "12.5px", fontWeight: 600, color: "#1e293b" }}>
                     {data.mcqScore ?? 0} / {data.mcqTotalMarks ?? 0}
@@ -1191,7 +1711,7 @@ export const AssessmentResultDetailPage: React.FC = () => {
       >
         <Card
           sx={{
-            p: 2.5,
+
             borderRadius: "12px",
             border: "1px solid #e2e8f0",
             bgcolor: "#ffffff",
@@ -1244,6 +1764,22 @@ export const AssessmentResultDetailPage: React.FC = () => {
               Wrong {wrongCount}
             </Button>
             <Button
+              onClick={() => setPaletteFilter("partial")}
+              sx={{
+                flex: 1,
+                py: 0.4,
+                fontSize: "12px",
+                fontWeight: 600,
+                textTransform: "none",
+                borderRadius: "6px",
+                color: paletteFilter === "partial" ? "#0f172a" : "#64748b",
+                bgcolor: paletteFilter === "partial" ? "#ffffff" : "transparent",
+                boxShadow: paletteFilter === "partial" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+              }}
+            >
+              Partial {partialCount}
+            </Button>
+            <Button
               onClick={() => setPaletteFilter("skipped")}
               sx={{
                 flex: 1,
@@ -1266,7 +1802,7 @@ export const AssessmentResultDetailPage: React.FC = () => {
               <Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
                   <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#1e293b" }}>
-                    MCQ {mcqQuestions.length} questions
+                    Objective {mcqQuestions.length} questions
                   </Typography>
                   <Typography sx={{ fontSize: "12px", fontWeight: 600, color: "#64748b" }}>
                     {data.mcqScore} / {data.mcqTotalMarks}
@@ -1522,22 +2058,37 @@ export const AssessmentResultDetailPage: React.FC = () => {
                   Question {currentQuestion.questionOrder} of {data.totalQuestions || questions.length}
                   {" · "}
                   <Typography component="span" sx={{ color: "#64748b", fontWeight: 600 }}>
-                    {currentQuestion.category}
+                    {currentQuestion.category.toUpperCase() === "MCQ" ? "Objective" : currentQuestion.category}
                     {currentQuestion.subSkill ? ` - ${currentQuestion.subSkill}` : ""}
                   </Typography>
                 </Typography>
 
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
-                  <Chip
-                    label={currentQuestion.category}
-                    size="small"
-                    sx={{
-                      fontSize: "11.5px",
-                      fontWeight: 600,
-                      bgcolor: "#f1f5f9",
-                      color: "#475569",
-                    }}
-                  />
+                  {isDragDropQuestion(currentQuestion) ? (
+                    <Chip
+                      icon={<DragIndicatorIcon sx={{ fontSize: "14px !important", color: "#475569" }} />}
+                      label="Drag and Drop"
+                      size="small"
+                      sx={{
+                        fontSize: "11.5px",
+                        fontWeight: 600,
+                        bgcolor: "#ffffff",
+                        border: "1px solid #e2e8f0",
+                        color: "#475569",
+                      }}
+                    />
+                  ) : (
+                    <Chip
+                      label={currentQuestion.category.toUpperCase() === "MCQ" ? "Objective" : currentQuestion.category}
+                      size="small"
+                      sx={{
+                        fontSize: "11.5px",
+                        fontWeight: 600,
+                        bgcolor: "#f1f5f9",
+                        color: "#475569",
+                      }}
+                    />
+                  )}
 
                   {(() => {
                     const cfg = getStatusColorConfig(currentQuestion.status);
@@ -1594,20 +2145,24 @@ export const AssessmentResultDetailPage: React.FC = () => {
             </Box>
 
             <Box sx={{ flex: 1, mb: 3 }}>
-              <Typography
-                sx={{
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  color: "#0f172a",
-                  lineHeight: 1.6,
-                  whiteSpace: "pre-line",
-                  mb: 3,
-                }}
-              >
-                {currentQuestion.questionText}
-              </Typography>
+              {isDragDropQuestion(currentQuestion) ? (
+                renderDragAndDropResult(currentQuestion)
+              ) : (
+                <>
+                  <Typography
+                    sx={{
+                      fontSize: "15px",
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      lineHeight: 1.6,
+                      whiteSpace: "pre-line",
+                      mb: 3,
+                    }}
+                  >
+                    {currentQuestion.questionText}
+                  </Typography>
 
-              {currentQuestion.category.toUpperCase() === "MCQ" && currentQuestion.options && (
+              {(currentQuestion.category.toUpperCase() === "MCQ" || currentQuestion.category.toUpperCase() === "OBJECTIVE") && currentQuestion.options && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 3 }}>
                   {currentQuestion.options.map((opt) => {
                     const isStudent = opt.isStudentAnswer;
@@ -1666,31 +2221,61 @@ export const AssessmentResultDetailPage: React.FC = () => {
                         </Box>
 
                         <Box sx={{ display: "flex", gap: 1 }}>
-                          {isStudent && (
+                          {opt.label ? (
                             <Chip
-                              label="Student's answer"
+                              label={opt.label}
                               size="small"
                               sx={{
                                 height: 22,
                                 fontSize: "11px",
                                 fontWeight: 700,
-                                bgcolor: isCorrect ? "#dcfce7" : "#fee2e2",
-                                color: isCorrect ? "#15803d" : "#b91c1c",
+                                bgcolor:
+                                  opt.label.toLowerCase().includes("correct") && !opt.label.toLowerCase().includes("missed")
+                                    ? "#dcfce7"
+                                    : opt.label.toLowerCase().includes("missed")
+                                      ? "#fef3c7"
+                                      : opt.label.toLowerCase().includes("incorrect") || opt.label.toLowerCase().includes("student answer")
+                                        ? "#fee2e2"
+                                        : "#f1f5f9",
+                                color:
+                                  opt.label.toLowerCase().includes("correct") && !opt.label.toLowerCase().includes("missed")
+                                    ? "#15803d"
+                                    : opt.label.toLowerCase().includes("missed")
+                                      ? "#b45309"
+                                      : opt.label.toLowerCase().includes("incorrect") || opt.label.toLowerCase().includes("student answer")
+                                        ? "#b91c1c"
+                                        : "#475569",
                               }}
                             />
-                          )}
-                          {isCorrect && (
-                            <Chip
-                              label="Correct answer"
-                              size="small"
-                              sx={{
-                                height: 22,
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                bgcolor: "#dcfce7",
-                                color: "#15803d",
-                              }}
-                            />
+                          ) : (
+                            <>
+                              {isStudent && (
+                                <Chip
+                                  label="Student's answer"
+                                  size="small"
+                                  sx={{
+                                    height: 22,
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                    bgcolor: isCorrect ? "#dcfce7" : "#fee2e2",
+                                    color: isCorrect ? "#15803d" : "#b91c1c",
+                                  }}
+                                />
+                              )}
+                              {isCorrect && (
+                                <Chip
+                                  label="Correct answer"
+                                  size="small"
+                                  sx={{
+                                    height: 22,
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                    bgcolor: "#dcfce7",
+                                    color: "#15803d",
+                                  }}
+                                />
+                              )}
+                            </>
                           )}
                         </Box>
                       </Box>
@@ -2754,6 +3339,8 @@ export const AssessmentResultDetailPage: React.FC = () => {
                     )}
                   </Box>
                 )}
+                </>
+              )}
             </Box>
 
             <Box

@@ -57,14 +57,17 @@ const Login = () => {
 
                 const currentRole =
                     (response as any)?.data?.role ||
+                    sessionStorage.getItem("role") ||
                     localStorage.getItem("role");
 
                 const isPaid =
+                    sessionStorage.getItem("isPaid") === "true" ||
                     localStorage.getItem("isPaid") === "true" ||
                     (response as any)?.data?.isPaid === true;
 
                 const isExpired =
                     checkIsExpired() ||
+                    sessionStorage.getItem("isExpired") === "true" ||
                     localStorage.getItem("isExpired") === "true" ||
                     (response as any)?.data?.isExpired === true ||
                     (typeof (response as any)?.data?.planStatus === "string" &&
@@ -77,10 +80,9 @@ const Login = () => {
                         window.location.href = "/subscription";
                     }
                 } else if (currentRole === "ROLE_TEACHER") {
-                    localStorage.setItem(
-                        "institutionId",
-                        (response as any)?.data?.institutionId
-                    );
+                    const instId = (response as any)?.data?.institutionId || "";
+                    sessionStorage.setItem("institutionId", instId);
+                    localStorage.setItem("institutionId", instId);
                     window.location.href = "/teacher/dashboard";
                 } else if (currentRole === "ROLE_STUDENT") {
                     window.location.href = "/student/dashboard";

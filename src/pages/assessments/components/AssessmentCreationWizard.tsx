@@ -274,12 +274,12 @@ export const AssessmentCreationWizard: React.FC<AssessmentCreationWizardProps> =
       (k) => modules[k]
     );
     if (enabledCategories.length === 0) {
-      onError("Please enable at least one module (MCQ, LSRW, Coding, etc.)");
+      onError("Please enable at least one module (Objective, LSRW, Coding, etc.)");
       return;
     }
 
     if (modules.MCQ && (!moduleCounts.MCQ || moduleCounts.MCQ <= 0)) {
-      onError("Please specify a valid question count for MCQ (minimum 1)");
+      onError("Please specify a valid question count for Objective (minimum 1)");
       return;
     }
     if (modules.LSRW && (!moduleCounts.LSRW || moduleCounts.LSRW <= 0)) {
@@ -301,7 +301,7 @@ export const AssessmentCreationWizard: React.FC<AssessmentCreationWizardProps> =
   const handleStep2Next = () => {
     if (modules.MCQ && selectedMcqCount < moduleCounts.MCQ) {
       onError(
-        `Please select all ${moduleCounts.MCQ} required MCQ questions (currently selected: ${selectedMcqCount})`
+        `Please select all ${moduleCounts.MCQ} required Objective questions (currently selected: ${selectedMcqCount})`
       );
       return;
     }
@@ -432,7 +432,7 @@ export const AssessmentCreationWizard: React.FC<AssessmentCreationWizardProps> =
                       size="small"
                     />
                   }
-                  label={<Typography variant="body2" sx={{ fontWeight: 600, color: "#344054" }}>MCQ</Typography>}
+                  label={<Typography variant="body2" sx={{ fontWeight: 600, color: "#344054" }}>Objective</Typography>}
                 />
 
                 <FormControlLabel
@@ -473,7 +473,7 @@ export const AssessmentCreationWizard: React.FC<AssessmentCreationWizardProps> =
                 {modules.MCQ && (
                   <Box sx={{ width: 160 }}>
                     <Typography variant="caption" sx={{ color: "#475467", fontWeight: 600, mb: 0.5, display: "block" }}>
-                      MCQ
+                      Objective
                     </Typography>
                     <TextField
                       size="small"
@@ -609,7 +609,7 @@ export const AssessmentCreationWizard: React.FC<AssessmentCreationWizardProps> =
               <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
                 {modules.MCQ && (
                   <Chip
-                    label={`● MCQ ${selectedMcqCount}/${moduleCounts.MCQ}${isMcqLimitReached ? " (Limit Reached)" : ""
+                    label={`● Objective ${selectedMcqCount}/${moduleCounts.MCQ}${isMcqLimitReached ? " (Limit Reached)" : ""
                       }`}
                     size="small"
                     onClick={() => setActiveCategoryTab("MCQ")}
@@ -736,6 +736,8 @@ export const AssessmentCreationWizard: React.FC<AssessmentCreationWizardProps> =
                   <MenuItem value="Single choice">Single choice</MenuItem>
                   <MenuItem value="Multiple choice">Multiple choice</MenuItem>
                   <MenuItem value="True/False">True/False</MenuItem>
+                  <MenuItem value="Fill in the blanks">Fill in the blanks</MenuItem>
+                  <MenuItem value="Drag and drop">Drag and drop</MenuItem>
                 </Select>
               </FormControl>
 

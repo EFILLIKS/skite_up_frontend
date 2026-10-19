@@ -143,7 +143,14 @@ export const QuestionBank: React.FC = () => {
     if (list && list.length > 0) {
       return ["All Types", ...list.filter((t) => t !== "All Types")];
     }
-    return ["All Types", "Single choice", "Multiple choice", "True/False"];
+    return [
+      "All Types",
+      "Single choice",
+      "Multiple choice",
+      "True/False",
+      "Fill in the blanks",
+      "Drag and drop",
+    ];
   }, [apiData]);
 
   const levelOptions = React.useMemo(() => {
@@ -364,7 +371,7 @@ export const QuestionBank: React.FC = () => {
                 <Tab
                   key={tab}
                   value={tab}
-                  label={tab}
+                  label={tab === "MCQ" ? "Objective" : tab}
                   disabled={isDisabled}
                   sx={{
                     textTransform: "none",

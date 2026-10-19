@@ -42,9 +42,9 @@ const districtOptions = [
 ];
 
 const getUserRole = (): string => {
-  const role = localStorage.getItem("role");
+  const role = sessionStorage.getItem("role") || localStorage.getItem("role");
   if (role) return role;
-  const token = localStorage.getItem("accessToken");
+  const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
   if (token) {
     try {
       const decoded = jwtDecode<JwtPayload>(token);

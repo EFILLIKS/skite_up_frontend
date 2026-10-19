@@ -9,12 +9,12 @@ import type { UserProfile, UserRole } from "../types/Nav.types";
 import { useProfileQuery } from "../features/authservice/AuthApi";
 import { checkIsExpired } from "../utils/authUtils";
 
-const SIDEBAR_WIDTH = 180;
+const SIDEBAR_WIDTH = 200;
 const HEADER_HEIGHT = 56;
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
   children,
-  initialRole = (localStorage.getItem("role") as UserRole) || "ROLE_PUBLIC",
+  initialRole = (sessionStorage.getItem("role") as UserRole) || (localStorage.getItem("role") as UserRole) || "ROLE_PUBLIC",
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -30,7 +30,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     role: initialRole,
   });
 
-  const hasToken = Boolean(localStorage.getItem("accessToken"));
+  const hasToken = Boolean(sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken"));
   const { data } = useProfileQuery(undefined, {
     skip: !hasToken,
     refetchOnMountOrArgChange: false,
@@ -40,7 +40,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
   const [authVersion, setAuthVersion] = useState(0);
   useEffect(() => {
-    const handleAuthChange = () => setAuthVersion((v) => v + 1);
+    const handleAuthChange = () => {
+      // If this tab already has its own active session in sessionStorage,
+      // do NOT let another tab's login change this tab's state!
+      const activeSessionRole = sessionStorage.getItem("role");
+      const activeSessionToken = sessionStorage.getItem("accessToken");
+      if (activeSessionRole && activeSessionToken) {
+        return;
+      }
+      setAuthVersion((v) => v + 1);
+    };
     window.addEventListener("auth-status-changed", handleAuthChange);
     window.addEventListener("storage", handleAuthChange);
     return () => {

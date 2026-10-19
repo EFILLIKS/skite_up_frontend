@@ -1,6 +1,8 @@
 import React from "react";
 import {
+  Autocomplete,
   Box,
+  TextField,
   Typography,
   IconButton,
   Radio,
@@ -15,7 +17,11 @@ import ArrowForwardIosRoundedIcon from "@mui/icons-material/ArrowForwardIosRound
 import Dialog from "../../../components/common/Dialog";
 import Button from "../../../components/common/Button";
 import Input from "../../../components/common/Input";
-import type { QuestionFormData } from "../../../utils/QuestionBankSchema";
+import {
+  getQuestionTotalMarks,
+  usesPerAnswerMarks,
+  type QuestionFormData,
+} from "../../../utils/QuestionBankSchema";
 import type { SkillTreeNode } from "../../../types/QuestionBank.types";
 
 interface QuestionFormDialogProps {
@@ -76,6 +82,8 @@ const questionTypeOptions = [
   { value: "Single choice", label: "Single choice" },
   { value: "Multiple choice", label: "Multiple choice" },
   { value: "True/False", label: "True / False" },
+  { value: "Fill in the blanks", label: "Fill in the blanks" },
+  { value: "Drag and drop", label: "Drag and drop" },
 ];
 
 const difficultyOptions = [
@@ -106,7 +114,10 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
   const totalCount = questions.length;
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === totalCount - 1;
-  const isMultipleChoice = currentQuestion.questionType.toLowerCase().includes("multiple");
+  const qTypeNorm = (currentQuestion.questionType || "").toLowerCase();
+  const isMultipleChoice = qTypeNorm.includes("multiple");
+  const isFillInTheBlanks = qTypeNorm.includes("blank") || qTypeNorm.includes("fill");
+  const isDragAndDrop = qTypeNorm.includes("drag") || qTypeNorm.includes("drop");
 
   const availableSkills = React.useMemo(() => {
     if (skillsTree && skillsTree.length > 0) {
@@ -119,7 +130,7 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
   }, [skillsTree]);
 
   const availableTopics = React.useMemo(() => {
-    const activeSkill = currentQuestion.skill || availableSkills[0] || "Quantitative Ability";
+    const activeSkill = currentQuestion.skill;
     if (skillsTree && skillsTree.length > 0) {
       const found = skillsTree.find(
         (s) => (s.skill || s.name || "").toLowerCase() === activeSkill.toLowerCase()
@@ -132,37 +143,16 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
       }
     }
     return topicOptionsMap[activeSkill] || ["General Topic"];
-  }, [skillsTree, currentQuestion.skill, availableSkills]);
+  }, [skillsTree, currentQuestion.skill]);
 
-  React.useEffect(() => {
-    if (!open) return;
-
-    let targetSkill = currentQuestion.skill;
-    let targetTopic = currentQuestion.topic;
-    let changed = false;
-
-    if (!targetSkill || !availableSkills.includes(targetSkill)) {
-      targetSkill = availableSkills[0] || "Quantitative Ability";
-      changed = true;
-    }
-
-    const foundSkill = skillsTree.find(
-      (s) => (s.skill || s.name || "").toLowerCase() === targetSkill.toLowerCase()
-    );
-    const validTopics =
-      foundSkill && foundSkill.topics && foundSkill.topics.length > 0
-        ? foundSkill.topics.map((t: any) => (typeof t === "string" ? t : t.topic)).filter(Boolean)
-        : topicOptionsMap[targetSkill] || [];
-
-    if (!targetTopic || !validTopics.includes(targetTopic)) {
-      targetTopic = validTopics[0] || "Percentages";
-      changed = true;
-    }
-
-    if (changed) {
-      onUpdateQuestion({ skill: targetSkill, topic: targetTopic });
-    }
-  }, [open, availableSkills, currentQuestion.skill, currentQuestion.topic, skillsTree, onUpdateQuestion]);
+  const correctAnswerCount = currentQuestion.options.filter((option) => option.isCorrect).length;
+  const marksPerCorrectAnswer =
+    qTypeNorm.includes("multiple") && correctAnswerCount > 0
+      ? currentQuestion.marks / correctAnswerCount
+      : currentQuestion.marks;
+  const questionTotalMarks = getQuestionTotalMarks(currentQuestion);
+  const formatMarks = (marks: number) =>
+    Number.isInteger(marks) ? String(marks) : String(Number(marks.toFixed(2)));
 
   return (
     <Dialog
@@ -374,7 +364,42 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
               options={questionTypeOptions}
               textFieldProps={{
                 value: currentQuestion.questionType,
-                onChange: (e) => onUpdateQuestion({ questionType: e.target.value }),
+                onChange: (e) => {
+                  const newType = e.target.value;
+                  const isBlank =
+                    newType.toLowerCase().includes("blank") ||
+                    newType.toLowerCase().includes("fill");
+                  const isDrag =
+                    newType.toLowerCase().includes("drag") ||
+                    newType.toLowerCase().includes("drop");
+                  const isTf = newType.toLowerCase().includes("true");
+
+                  let updatedOptions = [...(currentQuestion.options || [])];
+                  if (isTf) {
+                    updatedOptions = [
+                      { id: "opt-1", optionKey: "A", optionText: "True", isCorrect: true },
+                      { id: "opt-2", optionKey: "B", optionText: "False", isCorrect: false },
+                    ];
+                  } else if (isBlank || isDrag) {
+                    if (updatedOptions.length === 0) {
+                      updatedOptions = [
+                        { id: "opt-1", optionKey: "A", optionText: "", isCorrect: true },
+                        { id: "opt-2", optionKey: "B", optionText: "", isCorrect: true },
+                      ];
+                    } else {
+                      updatedOptions = updatedOptions.map((opt, i) => ({
+                        ...opt,
+                        optionKey: String.fromCharCode(65 + i),
+                        isCorrect: true,
+                      }));
+                    }
+                  } else {
+                    if (!updatedOptions.some((o) => o.isCorrect) && updatedOptions.length > 0) {
+                      updatedOptions[0].isCorrect = true;
+                    }
+                  }
+                  onUpdateQuestion({ questionType: newType, options: updatedOptions });
+                },
                 error: Boolean(errors.questionType),
                 helperText: errors.questionType,
                 sx: {
@@ -400,11 +425,21 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
               type="textarea"
               textFieldProps={{
                 minRows: 3.5,
-                placeholder: "Write the question as students will see it",
+                placeholder: isFillInTheBlanks
+                  ? "e.g., Which _A_____ will be on the face _B____ to the face with symbol _C____ with the console panel to link _D____"
+                  : isDragAndDrop
+                  ? "e.g., Which [Symbol] Calculation method is converted into coding to [      ] Calculation method..."
+                  : "Write the question as students will see it",
                 value: currentQuestion.questionText,
                 onChange: (e) => onUpdateQuestion({ questionText: e.target.value }),
                 error: Boolean(errors.questionText),
-                helperText: errors.questionText,
+                helperText:
+                  errors.questionText ||
+                  (isFillInTheBlanks
+                    ? "Tip: Use _A_____, _B_____ or [A], [B] in your text where blanks should appear."
+                    : isDragAndDrop
+                    ? "Tip: Use [      ] or [A], [B] in your text where draggable items should be dropped."
+                    : undefined),
                 sx: {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: "8px",
@@ -420,9 +455,13 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
           <Box>
             <Typography
               variant="caption"
-              sx={{ color: "#475467", fontWeight: 500, mb: 1, display: "block" }}
+              sx={{ color: "#475467", fontWeight: 600, mb: 1, display: "block" }}
             >
-              Options - select the correct answer
+              {isFillInTheBlanks
+                ? "Blank answers - provide the correct answer for each blank"
+                : isDragAndDrop
+                ? "Draggable items - options students will drag into blanks"
+                : "Options - select the correct answer"}
             </Typography>
 
             {errors.options && (
@@ -441,14 +480,57 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
                   sx={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 1,
-                    p: 0.5,
+                    gap: 1.25,
+                    p: 0.75,
                     borderRadius: "8px",
-                    bgcolor: option.isCorrect ? "#f6fef9" : "transparent",
+                    bgcolor:
+                      isFillInTheBlanks || isDragAndDrop
+                        ? "#f8fdf9"
+                        : option.isCorrect
+                        ? "#f6fef9"
+                        : "transparent",
+                    border:
+                      isFillInTheBlanks || isDragAndDrop
+                        ? "1px solid #e2e8f0"
+                        : "none",
                     transition: "background-color 0.2s ease",
                   }}
                 >
-                  {isMultipleChoice ? (
+                  {isFillInTheBlanks ? (
+                    <Box
+                      sx={{
+                        px: 1.25,
+                        py: 0.5,
+                        borderRadius: "6px",
+                        bgcolor: "#16a34a",
+                        color: "#ffffff",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        minWidth: "68px",
+                        textAlign: "center",
+                      }}
+                    >
+                      Blank {option.optionKey || String.fromCharCode(65 + idx)}
+                    </Box>
+                  ) : isDragAndDrop ? (
+                    <Box
+                      sx={{
+                        px: 1.25,
+                        py: 0.5,
+                        borderRadius: "16px",
+                        bgcolor: "#16a34a",
+                        color: "#ffffff",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        minWidth: "60px",
+                        textAlign: "center",
+                      }}
+                    >
+                      Item {option.optionKey || String.fromCharCode(65 + idx)}
+                    </Box>
+                  ) : isMultipleChoice ? (
                     <Checkbox
                       checked={option.isCorrect}
                       onChange={() => onToggleCorrectOption(option.id)}
@@ -475,7 +557,11 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
                   <Input
                     type="text"
                     textFieldProps={{
-                      placeholder: `Option ${option.optionKey || String.fromCharCode(65 + idx)}`,
+                      placeholder: isFillInTheBlanks
+                        ? `Correct answer for Blank ${option.optionKey || String.fromCharCode(65 + idx)} (e.g. Symbol)`
+                        : isDragAndDrop
+                        ? `Draggable item text (e.g. Console, Symbol)`
+                        : `Option ${option.optionKey || String.fromCharCode(65 + idx)}`,
                       value: option.optionText,
                       onChange: (e) => {
                         const updatedOpts = currentQuestion.options.map((o) =>
@@ -497,12 +583,22 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
                   <IconButton
                     size="small"
                     onClick={() => onRemoveOption(option.id)}
-                    disabled={currentQuestion.options.length <= 2}
+                    disabled={
+                      isFillInTheBlanks || isDragAndDrop
+                        ? currentQuestion.options.length <= 1
+                        : currentQuestion.options.length <= 2
+                    }
                     sx={{
                       color: "#98a2b3",
                       "&:hover": { color: "#d92d20", bgcolor: "#fef3f2" },
                     }}
-                    title="Remove option"
+                    title={
+                      isFillInTheBlanks
+                        ? "Remove blank"
+                        : isDragAndDrop
+                        ? "Remove item"
+                        : "Remove option"
+                    }
                   >
                     <DeleteOutlineRoundedIcon fontSize="small" />
                   </IconButton>
@@ -525,7 +621,11 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
                   "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
                 }}
               >
-                Add option
+                {isFillInTheBlanks
+                  ? "Add blank"
+                  : isDragAndDrop
+                  ? "Add draggable item"
+                  : "Add option"}
               </Button>
             </Box>
           </Box>
@@ -572,38 +672,48 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
               Skill
             </Typography>
 
-            <Input
-              type="select"
-              options={availableSkills.map((s) => ({ value: s, label: s }))}
-              textFieldProps={{
-                value: currentQuestion.skill || availableSkills[0] || "",
-                onChange: (e) => {
-                  const newSkill = e.target.value;
-                  const found = skillsTree.find(
-                    (s) => (s.skill || s.name || "").toLowerCase() === (newSkill || "").toLowerCase()
-                  );
-                  const newTopics =
-                    found && found.topics && found.topics.length > 0
-                      ? found.topics.map((t: any) => (typeof t === "string" ? t : t.topic)).filter(Boolean)
-                      : topicOptionsMap[newSkill] || [];
-
-                  const defaultNewTopic = newTopics[0] || "General Topic";
-
-                  onUpdateQuestion({
-                    skill: newSkill,
-                    topic: defaultNewTopic,
-                  });
-                },
-                error: Boolean(errors.skill),
-                helperText: errors.skill,
-                sx: {
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: "8px",
-                    bgcolor: "#ffffff",
-                    fontSize: 14,
-                  },
-                },
+            <Autocomplete
+              freeSolo
+              options={availableSkills}
+              value={currentQuestion.skill || ""}
+              onInputChange={(_, value, reason) => {
+                if (reason === "input" || reason === "clear") {
+                  onUpdateQuestion({ skill: value });
+                }
               }}
+              onChange={(_, value) => {
+                const newSkill = value || "";
+                const found = skillsTree.find(
+                  (skill) =>
+                    (skill.skill || skill.name || "").toLowerCase() === newSkill.toLowerCase()
+                );
+                const firstTopic = found?.topics[0]
+                  ? typeof found.topics[0] === "string"
+                    ? found.topics[0]
+                    : found.topics[0].topic
+                  : (topicOptionsMap[newSkill] || [])[0];
+
+                onUpdateQuestion({
+                  skill: newSkill,
+                  ...(firstTopic ? { topic: firstTopic } : {}),
+                });
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="Search or enter a skill"
+                  error={Boolean(errors.skill)}
+                  helperText={errors.skill}
+                  size="small"
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: "8px",
+                      bgcolor: "#ffffff",
+                      fontSize: 14,
+                    },
+                  }}
+                />
+              )}
             />
           </Box>
 
@@ -615,22 +725,32 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
               Topic
             </Typography>
 
-            <Input
-              type="select"
-              options={availableTopics.map((t) => ({ value: t, label: t }))}
-              textFieldProps={{
-                value: currentQuestion.topic || availableTopics[0] || "",
-                onChange: (e) => onUpdateQuestion({ topic: e.target.value }),
-                error: Boolean(errors.topic),
-                helperText: errors.topic,
-                sx: {
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: "8px",
-                    bgcolor: "#ffffff",
-                    fontSize: 14,
-                  },
-                },
+            <Autocomplete
+              freeSolo
+              options={availableTopics}
+              value={currentQuestion.topic || ""}
+              onInputChange={(_, value, reason) => {
+                if (reason === "input" || reason === "clear") {
+                  onUpdateQuestion({ topic: value });
+                }
               }}
+              onChange={(_, value) => onUpdateQuestion({ topic: value || "" })}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="Search or enter a topic"
+                  error={Boolean(errors.topic)}
+                  helperText={errors.topic}
+                  size="small"
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: "8px",
+                      bgcolor: "#ffffff",
+                      fontSize: 14,
+                    },
+                  }}
+                />
+              )}
             />
           </Box>
 
@@ -670,7 +790,11 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
                 variant="caption"
                 sx={{ color: "#344054", fontWeight: 600, mb: 0.75, display: "block" }}
               >
-                Marks
+                {isMultipleChoice
+                  ? "Total Mark"
+                  : usesPerAnswerMarks(currentQuestion.questionType)
+                    ? "Mark / answer"
+                    : "Marks"}
               </Typography>
 
               <Input
@@ -731,6 +855,29 @@ export const QuestionFormDialog: React.FC<QuestionFormDialogProps> = ({
               />
             </Box>
           </Box>
+          {(isMultipleChoice || isFillInTheBlanks || isDragAndDrop) && (
+            <Box
+              sx={{
+                mt: -1.5,
+                px: 1.5,
+                py: 1,
+                bgcolor: "#f8f9fc",
+                borderRadius: "8px",
+                border: "1px solid #eaecf0",
+              }}
+            >
+              <Typography variant="caption" sx={{ display: "block", color: "#344054" }}>
+                Total Mark: {formatMarks(questionTotalMarks)}
+              </Typography>
+              {isMultipleChoice && (
+                <Typography variant="caption" sx={{ display: "block", color: "#344054" }}>
+                  Correct answer mark:{" "}
+                  {correctAnswerCount > 0 ? formatMarks(marksPerCorrectAnswer) : "--"}
+                  {correctAnswerCount > 0 && " each"}
+                </Typography>
+              )}
+            </Box>
+          )}
         </Box>
       </Box>
     </Dialog>

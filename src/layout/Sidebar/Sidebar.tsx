@@ -20,7 +20,7 @@ import { type SidebarProps } from "../../types/SideBar.types";
 import { checkIsExpired } from "../../utils/authUtils";
 import skitupLogo from "../../assets/skitup-logo.svg";
 import { useNavigate, useLocation } from "react-router-dom";
-const SIDEBAR_WIDTH = 180;
+const SIDEBAR_WIDTH = 200;
 
 export const Sidebar: React.FC<SidebarProps> = (props) => {
   const navigate = useNavigate();
@@ -28,7 +28,14 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
   const { open, onClose, currentUser, activeId, onSelectNav, isMobile } = props;
   const [authVersion, setAuthVersion] = React.useState(0);
   React.useEffect(() => {
-    const handleAuthChange = () => setAuthVersion((v) => v + 1);
+    const handleAuthChange = () => {
+      const activeSessionRole = sessionStorage.getItem("role");
+      const activeSessionToken = sessionStorage.getItem("accessToken");
+      if (activeSessionRole && activeSessionToken) {
+        return;
+      }
+      setAuthVersion((v) => v + 1);
+    };
     window.addEventListener("auth-status-changed", handleAuthChange);
     window.addEventListener("storage", handleAuthChange);
     return () => {
@@ -37,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
     };
   }, []);
 
-  const isPaid = localStorage.getItem("isPaid") === "true";
+  const isPaid = (sessionStorage.getItem("isPaid") || localStorage.getItem("isPaid")) === "true";
   const isExpired = checkIsExpired();
   const visibleSections = React.useMemo(
     () => getFilteredNavigation(navigationConfig, currentUser.role, isPaid, isExpired),
@@ -45,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
   );
   const handleLogout = () => {
     navigate("/");
+    sessionStorage.clear();
     localStorage.clear();
   };
   const sidebarContent = (
@@ -60,13 +68,12 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
     >
       <Box
         sx={{
-          height: 45,
-          minHeight: 56,
-          px: 0,
+          height: 56,
+          px: 1.5,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          borderBottom: "1px solid #f2f4f7",
+          borderBottom: "1px solid #eaecf0",
         }}
       >
         <Box
@@ -75,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
             justifyContent: "center",
             alignItems: "center",
             width: "100%",
-            py: 2,
+            py: 1.5,
           }}
         >
           <Box
@@ -83,7 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
             src={skitupLogo}
             alt="Skitup Logo"
             sx={{
-              width: 150,
+              width: 145,
               height: "auto",
               objectFit: "contain",
             }}
@@ -99,8 +106,8 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
         sx={{
           flex: 1,
           overflowY: "auto",
-          px: 0,
-          py: 2,
+          px: 1.25,
+          py: 1.5,
           "&::-webkit-scrollbar": { width: 5 },
           "&::-webkit-scrollbar-thumb": { bgcolor: "#eaecf0", borderRadius: 4 },
         }}
@@ -131,6 +138,8 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                   location.pathname === item.path ||
                   (item.path !== "/" &&
                     item.path !== "/dashboard" &&
+                    item.path !== "/teacher/dashboard" &&
+                    item.path !== "/student/dashboard" &&
                     item.path !== "/institution/dashboard" &&
                     location.pathname.startsWith(item.path)) ||
                   activeId === item.id;
@@ -145,13 +154,14 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                     }}
                     sx={{
                       position: "relative",
-                      minHeight: 34,
-                      borderRadius: 1,
-                      py: 0.75,
-                      px: 1,
+                      minHeight: 44,
+                      borderRadius: "8px",
+                      py: 1.1,
+                      px: 1.75,
                       transition: "all 0.15s ease",
-                      bgcolor: isActive && !isDisabled ? "#eaf4fc" : "transparent",
-                      color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#475467",
+                      bgcolor: isActive && !isDisabled ? "#edf5fd" : "transparent",
+                      color: isDisabled ? "#98a2b3" : isActive ? "#1570ef" : "#475467",
+                      overflow: "hidden",
                       "&.Mui-disabled": {
                         opacity: 0.45,
                         cursor: "not-allowed",
@@ -161,30 +171,35 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                         content: '""',
                         position: "absolute",
                         left: 0,
-                        top: 4,
-                        bottom: 4,
-                        width: 3,
-                        borderRadius: 4,
-                        bgcolor: isActive && !isDisabled ? "#337ECC" : "transparent",
+                        top: 0,
+                        bottom: 0,
+                        width: 3.5,
+                        borderTopLeftRadius: "8px",
+                        borderBottomLeftRadius: "8px",
+                        bgcolor: isActive && !isDisabled ? "#1570ef" : "transparent",
                       },
                       "&:hover": {
-                        bgcolor: isDisabled ? "transparent" : isActive ? "#eaf4fc" : "#f9fafb",
-                        color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#1d2939",
+                        bgcolor: isDisabled ? "transparent" : isActive ? "#edf5fd" : "#f8fafc",
+                        color: isDisabled ? "#98a2b3" : isActive ? "#1570ef" : "#1d2939",
                       },
                     }}
                   >
                     <ListItemIcon
                       sx={{
-                        minWidth: 30,
-                        color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#667085",
+                        minWidth: 36,
+                        color: isDisabled ? "#98a2b3" : isActive ? "#1570ef" : "#667085",
                         transition: "color 0.15s ease",
+                        display: "flex",
+                        alignItems: "center",
                         "& svg": {
-                          color: isDisabled ? "#98a2b3 !important" : isActive && !isDisabled ? "#337ECC !important" : undefined,
-                          stroke: isDisabled ? "#98a2b3" : isActive && !isDisabled ? "#337ECC" : undefined,
+                          width: 22,
+                          height: 22,
+                          color: isDisabled ? "#98a2b3 !important" : isActive && !isDisabled ? "#1570ef !important" : "#667085",
+                          stroke: "currentColor",
                           fill: "none",
                         },
-                        "& svg path, & svg circle, & svg rect": {
-                          stroke: isDisabled ? "#98a2b3" : isActive && !isDisabled ? "#337ECC" : undefined,
+                        "& svg path, & svg circle, & svg rect, & svg polyline, & svg line": {
+                          stroke: "currentColor",
                           fill: "none",
                         },
                       }}
@@ -197,9 +212,10 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                       slotProps={{
                         primary: {
                           sx: {
-                            fontSize: 12,
+                            fontSize: "14.5px",
                             fontWeight: isActive && !isDisabled ? 600 : 500,
-                            color: isDisabled ? "#98a2b3" : isActive ? "#337ECC" : "#344054",
+                            color: isDisabled ? "#98a2b3" : isActive ? "#1570ef" : "#475467",
+                            lineHeight: 1.4,
                           },
                         },
                       }}
@@ -223,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                 );
 
                 return (
-                  <ListItem key={item.id} disablePadding sx={{ mb: 0.5 }}>
+                  <ListItem key={item.id} disablePadding sx={{ mb: 0.75 }}>
                     {isDisabled ? (
                       <Tooltip title="Subscription required (Plan expired)" arrow placement="right">
                         <Box component="span" sx={{ width: "100%", display: "block", cursor: "not-allowed" }}>
@@ -253,28 +269,29 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
               alignItems: "center",
               gap: 2,
               minWidth: 0,
-              px: 1,
-              py: 0.75,
+              px: 1.5,
+              py: 1,
               width: "100%",
-              borderRadius: 1,
+              borderRadius: "8px",
               cursor: "pointer",
               color: "#667085",
-              transition: "all 0.2s ease",
+              transition: "all 0.15s ease",
               "&:hover": {
-                color: "#337ECC",
+                color: "#1570ef",
+                bgcolor: "#f8fafc",
               },
             }}
             onClick={handleLogout}
           >
             <Tooltip title="Sign out">
-              <LogoutRoundedIcon fontSize="small" />
+              <LogoutRoundedIcon sx={{ fontSize: 20 }} />
             </Tooltip>
 
             <Typography
               variant="body2"
               sx={{
                 fontWeight: 500,
-                fontSize: 12,
+                fontSize: "14px",
                 color: "inherit",
               }}
             >

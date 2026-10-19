@@ -67,11 +67,11 @@ export const Header: React.FC<HeaderProps> = ({
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
   const [notificationAnchor, setNotificationAnchor] = useState<null | HTMLElement>(null);
 
-  const [hasToken, setHasToken] = useState<boolean>(() => Boolean(localStorage.getItem("accessToken")));
+  const [hasToken, setHasToken] = useState<boolean>(() => Boolean(sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken")));
 
   useEffect(() => {
     const handleAuthChange = () => {
-      setHasToken(Boolean(localStorage.getItem("accessToken")));
+      setHasToken(Boolean(sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken")));
     };
     window.addEventListener("auth-status-changed", handleAuthChange);
     window.addEventListener("storage", handleAuthChange);
@@ -352,6 +352,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => {
               handleCloseProfile();
               globalPreviousUnreadCount = null;
+              sessionStorage.clear();
               localStorage.clear();
               navigate("/", { replace: true });
             }}

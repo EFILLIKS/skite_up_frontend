@@ -95,7 +95,7 @@ export const QuestionDetailDialog: React.FC<QuestionDetailDialogProps> = ({
       <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
           <Chip
-            label={question.category || "MCQ"}
+            label={(question.category || "").toUpperCase() === "MCQ" ? "Objective" : (question.category || "Objective")}
             size="small"
             sx={{ bgcolor: "#eff8ff", color: "#175cd3", fontWeight: 700, borderRadius: "6px" }}
           />

@@ -330,6 +330,10 @@ export interface AssessmentSessionResponse {
 export interface QuestionResponseRequest {
   action: "SAVE" | "SKIP" | "FLAG" | "CLEAR" | string;
   selectedOption?: string | null;
+  selectedOptions?: string[];
+  blanks?: string[] | Record<string, string>;
+  matches?: Record<string, string>;
+  pairs?: Array<{ target: string; value: string }>;
   textResponse?: string | null;
   audioResponseUrl?: string | null;
   transcript?: string | null;
@@ -401,6 +405,10 @@ export interface RunCodeApiResponse {
 
 export interface StudentResponseBatchItem {
   selectedOption?: string | null;
+  selectedOptions?: string[];
+  blanks?: string[] | Record<string, string>;
+  matches?: Record<string, string>;
+  pairs?: Array<{ target: string; value: string }>;
   timeSpentSeconds?: number | null;
   code?: string | null;
   language?: string | null;
@@ -450,11 +458,17 @@ export interface StudentLsrwSubSection {
 export interface StudentPaletteFilters {
   all: number;
   wrong: number;
+  partial?: number;
+  partiallyCorrect?: number;
   skipped: number;
 }
 
 export interface StudentTestSectionBreakdown {
   sectionName: string;
+  badge?: string;
+  title?: string;
+  scoreText?: string;
+  color?: string;
   questionCountDisplay?: string;
   totalQuestions: number;
   attemptedQuestions: number;
@@ -473,6 +487,7 @@ export interface StudentQuestionOption {
   optionText: string;
   isCorrect: boolean;
   isStudentAnswer: boolean;
+  label?: string | null;
 }
 
 export interface StudentCodingTestCase {
@@ -491,6 +506,7 @@ export interface StudentQuestionEvaluation {
   questionOrder: number;
   totalQuestionsInTest?: number;
   category: "MCQ" | "CODING" | "LSRW" | string;
+  questionType?: string;
   subSkill?: string;
   questionText: string;
   status: "CORRECT" | "WRONG" | "PARTIALLY_CORRECT" | "NOT_ANSWERED" | string;
@@ -549,6 +565,7 @@ export interface StudentTestResultData {
   submittedAtDisplay?: string;
   durationSpentDisplay?: string;
   timeTakenDisplay?: string;
+  finalScoreAndGradeDisplay?: string;
   attempt?: number;
   score: number;
   totalMarks: number;
@@ -568,6 +585,7 @@ export interface StudentTestResultData {
   mcqPercentage?: number;
   mcqQuestionsCount?: number;
   mcqCorrectCount?: number;
+  mcqPartiallyCorrectCount?: number;
   mcqIncorrectCount?: number;
   mcqUnattemptedCount?: number;
   lsrwScore?: number;
@@ -680,6 +698,59 @@ export interface TeacherStudentResultsQueryParams {
   sortBy?: string;
   direction?: "ASC" | "DESC" | "asc" | "desc";
 }
+
+export interface AssessmentDetailData {
+  id: string;
+  testName?: string;
+  title?: string;
+  description?: string;
+  categories?: string;
+  categoriesList?: string[];
+  objectiveCount?: number;
+  mcqCount?: number;
+  lsrwCount?: number;
+  codingCount?: number;
+  cognitiveCount?: number;
+  totalQuestions?: number;
+  totalMarks?: number;
+  totalMarksDisplay?: string;
+  durationMinutes?: number;
+  negativeMarksPerWrong?: number;
+  attemptsAllowed?: number;
+  status?: string;
+  createdByName?: string;
+  totalStudentsAssigned?: number;
+  totalStudentsAttended?: number;
+  attendedCount?: number;
+  passedStudentsCount?: number;
+  passCount?: number;
+  failedStudentsCount?: number;
+  failCount?: number;
+  unattendedCount?: number;
+  missedCount?: number;
+  passPercentage?: number;
+  passingPercentage?: number;
+  passingThresholdDisplay?: string;
+  studentAttended?: boolean;
+  studentStatus?: string;
+  isPassed?: boolean;
+  studentScore?: number;
+  studentPercentage?: number;
+  studentTotalTestsAttended?: number;
+  studentTotalTestsPassed?: number;
+  studentTotalTestsFailed?: number;
+  timeDisplay?: string;
+  dateDisplay?: string;
+  opensAt?: string;
+  closesAt?: string;
+}
+
+export interface AssessmentDetailResponse {
+  statusCode: number;
+  message: string;
+  data: AssessmentDetailData;
+}
+
 
 
 

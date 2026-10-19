@@ -7,6 +7,7 @@ import {
   InputBase,
   Chip,
   Alert,
+  Dialog as MuiDialog,
 } from "@mui/material";
 import {
   AssignmentOutlined as AssignmentOutlinedIcon,
@@ -19,7 +20,6 @@ import {
 
 import Card from "../../components/common/Card";
 import Button from "../../components/common/Button";
-import Dialog from "../../components/common/Dialog";
 import Snackbar from "../../components/common/Snackbar";
 import AppSkeleton from "../../components/common/Skeleton";
 import DonutChartCard from "../../components/common/DonutChartCard";
@@ -27,6 +27,7 @@ import type { SnackbarState } from "../../types/Snackbar.types";
 import AssessmentCalendarWidget from "../assessments/components/AssessmentCalendarWidget";
 
 import { useGetStudentDashboardQuery } from "../../features/dashboard/DashboardApi";
+import { useGetAssessmentByIdQuery } from "../../features/assessment/AssessmentApi";
 import type { StudentDashboardTaskItem } from "../../types/Dashboard.types";
 
 export const StudentDashBoard: React.FC = () => {
@@ -38,6 +39,21 @@ export const StudentDashBoard: React.FC = () => {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<StudentDashboardTaskItem | null>(null);
+
+  const assessmentIdToFetch =
+    selectedTaskDetails?.assessmentId ||
+    selectedTaskDetails?.id ||
+    selectedTaskDetails?.assignmentId ||
+    "";
+
+  const {
+    data: assessmentDetailResponse,
+    isLoading: isAssessmentDetailLoading,
+  } = useGetAssessmentByIdQuery(assessmentIdToFetch, {
+    skip: !assessmentIdToFetch || !selectedTaskDetails,
+  });
+
+  const detailData = assessmentDetailResponse?.data;
 
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
@@ -66,7 +82,22 @@ export const StudentDashBoard: React.FC = () => {
     : (studentData?.tasks || studentData?.tasksPage?.content || calendarData?.testsForSelectedDate || []);
 
   const displayedTasks = React.useMemo(() => {
-    const list = [...tasksList];
+    let list = [...tasksList];
+    if (statusFilter && statusFilter !== "All") {
+      list = list.filter(
+        (item) => (item.status || "").toLowerCase() === statusFilter.toLowerCase()
+      );
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (item) =>
+          item.title?.toLowerCase().includes(q) ||
+          item.categories?.toLowerCase().includes(q) ||
+          item.categoryList?.some((cat) => cat.toLowerCase().includes(q)) ||
+          item.timeDisplay?.toLowerCase().includes(q)
+      );
+    }
     const getPriority = (item: StudentDashboardTaskItem) => {
       const status = (item.status || "").toLowerCase();
       if (status === "live" || item.canStart) return 1;
@@ -77,7 +108,7 @@ export const StudentDashBoard: React.FC = () => {
     };
 
     return list.sort((a, b) => getPriority(a) - getPriority(b)).slice(0, 3);
-  }, [tasksList]);
+  }, [tasksList, statusFilter, searchQuery]);
 
   const welcomeTitle = studentData?.welcomeTitle || "Welcome, Ramesh 👋";
   const welcomeSubtitle = studentData?.welcomeSubtitle || "Let’s learn something new today!";
@@ -111,12 +142,102 @@ export const StudentDashBoard: React.FC = () => {
   ];
 
   const handleStartTest = (task: StudentDashboardTaskItem) => {
-    if (!task.canStart) return;
-    const testId = task.assignmentId || task.assessmentId || task.id;
-    if (testId) {
-      navigate(`/student/assessments/take/${testId}`);
+    const isDone =
+      task.attended ||
+      task.status === "Completed" ||
+      detailData?.studentAttended ||
+      detailData?.status === "COMPLETED";
+
+    const resId =
+      task.studentAssignmentId ||
+      task.assignmentId ||
+      task.assessmentId ||
+      task.id;
+
+    if (isDone) {
+      if (resId) navigate(`/student/result/${resId}`);
+      return;
+    }
+    if (resId) {
+      navigate(`/student/assessments/take/${resId}`);
     }
   };
+
+  const dialogTitle =
+    detailData?.testName ||
+    detailData?.title ||
+    selectedTaskDetails?.title ||
+    "";
+
+  const rawStatus =
+    detailData?.studentStatus ||
+    detailData?.status ||
+    selectedTaskDetails?.status ||
+    "";
+
+  const isCompleted =
+    rawStatus.toLowerCase() === "completed" ||
+    rawStatus.toLowerCase() === "passed" ||
+    rawStatus.toLowerCase() === "failed" ||
+    Boolean(detailData?.studentAttended) ||
+    Boolean(selectedTaskDetails?.attended);
+
+  const isLive = !isCompleted && rawStatus.toLowerCase() === "live";
+  const isUpcoming = !isCompleted && rawStatus.toLowerCase() === "upcoming";
+  const isStartDisabled =
+    isCompleted ||
+    !isLive ||
+    (selectedTaskDetails ? !selectedTaskDetails.canStart : false);
+
+  const dialogDuration =
+    detailData?.durationMinutes ??
+    selectedTaskDetails?.durationMinutes ??
+    0;
+
+  const dialogQuestions =
+    detailData?.totalQuestions ??
+    selectedTaskDetails?.totalQuestions ??
+    (detailData?.mcqCount !== undefined
+      ? ((detailData.mcqCount || 0) + (detailData.codingCount || 0) + (detailData.lsrwCount || 0) + (detailData.objectiveCount || 0))
+      : 0);
+
+  const dialogMarks =
+    detailData?.totalMarks !== undefined
+      ? Math.round(detailData.totalMarks)
+      : (selectedTaskDetails?.totalMarks !== undefined ? Math.round(selectedTaskDetails.totalMarks) : 0);
+
+  const dialogCategories =
+    detailData?.categories ||
+    (detailData?.categoriesList && detailData.categoriesList.length > 0 ? detailData.categoriesList.join(" . ") : "") ||
+    selectedTaskDetails?.categories ||
+    (selectedTaskDetails?.categoryList && selectedTaskDetails.categoryList.length > 0 ? selectedTaskDetails.categoryList.join(" . ") : "-");
+
+  const dialogDateTime =
+    selectedTaskDetails?.timeDisplay ||
+    selectedTaskDetails?.dateDisplay ||
+    detailData?.timeDisplay ||
+    detailData?.dateDisplay ||
+    "-";
+
+  const dialogTotalAttempt =
+    detailData?.studentTotalTestsAttended ??
+    detailData?.attemptsAllowed ??
+    (selectedTaskDetails?.attended ? 1 : 0);
+
+  const dialogPassCount =
+    detailData?.passCount ??
+    detailData?.passedStudentsCount ??
+    detailData?.studentTotalTestsPassed ??
+    0;
+
+  const dialogFailCount =
+    detailData?.failCount ??
+    detailData?.failedStudentsCount ??
+    detailData?.studentTotalTestsFailed ??
+    0;
+
+  const dialogAssignedBy =
+    detailData?.createdByName || "-";
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 3.5 }, bgcolor: "#ffffff", minHeight: "100vh" }}>
@@ -235,57 +356,57 @@ export const StudentDashBoard: React.FC = () => {
       >
         {isLoading || isFetching
           ? Array.from({ length: 3 }).map((_, idx) => (
-              <AppSkeleton
-                key={idx}
-                variant="rectangular"
-                height={115}
-                sx={{ borderRadius: "12px" }}
-              />
-            ))
+            <AppSkeleton
+              key={idx}
+              variant="rectangular"
+              height={115}
+              sx={{ borderRadius: "12px" }}
+            />
+          ))
           : statKpis.map((stat) => (
-              <Card
-                key={stat.title}
-                title={stat.title}
-                headerAction={stat.icon}
-                elevation={0}
+            <Card
+              key={stat.title}
+              title={stat.title}
+              headerAction={stat.icon}
+              elevation={0}
+              sx={{
+                border: "1px solid #eaecf0",
+                borderRadius: "12px",
+                bgcolor: "#ffffff",
+                boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+                "& .MuiCardHeader-root": {
+                  p: "18px 20px 4px 20px",
+                },
+                "& .MuiCardHeader-title": {
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  color: "#344054",
+                },
+                "& .MuiCardHeader-action": {
+                  m: 0,
+                  alignSelf: "center",
+                },
+              }}
+              contentSx={{
+                p: "0 20px 18px 20px !important",
+              }}
+            >
+              <Typography
                 sx={{
-                  border: "1px solid #eaecf0",
-                  borderRadius: "12px",
-                  bgcolor: "#ffffff",
-                  boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
-                  "& .MuiCardHeader-root": {
-                    p: "18px 20px 4px 20px",
-                  },
-                  "& .MuiCardHeader-title": {
-                    fontSize: "14px",
-                    fontWeight: 600,
-                    color: "#344054",
-                  },
-                  "& .MuiCardHeader-action": {
-                    m: 0,
-                    alignSelf: "center",
-                  },
-                }}
-                contentSx={{
-                  p: "0 20px 18px 20px !important",
+                  fontSize: "32px",
+                  fontWeight: 700,
+                  color: "#101828",
+                  lineHeight: 1.2,
+                  mb: 0.5,
                 }}
               >
-                <Typography
-                  sx={{
-                    fontSize: "32px",
-                    fontWeight: 700,
-                    color: "#101828",
-                    lineHeight: 1.2,
-                    mb: 0.5,
-                  }}
-                >
-                  {stat.value}
-                </Typography>
-                <Typography sx={{ fontSize: "12px", color: "#667085", fontWeight: 400 }}>
-                  {stat.subtext}
-                </Typography>
-              </Card>
-            ))}
+                {stat.value}
+              </Typography>
+              <Typography sx={{ fontSize: "12px", color: "#667085", fontWeight: 400 }}>
+                {stat.subtext}
+              </Typography>
+            </Card>
+          ))}
       </Box>
 
       <Box
@@ -302,12 +423,13 @@ export const StudentDashBoard: React.FC = () => {
           sx={{
             display: "flex",
             alignItems: "center",
-            width: { xs: "100%", sm: 380 },
+            width: { xs: "100%", sm: 340, md: 380 },
             border: "1px solid #e4e7ec",
-            borderRadius: "24px",
-            px: 2,
+            borderRadius: "8px",
+            px: 1.75,
             py: 0.75,
             bgcolor: "#ffffff",
+            boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
             transition: "border-color 0.2s ease, box-shadow 0.2s ease",
             "&:focus-within": {
               borderColor: "#2563eb",
@@ -319,10 +441,10 @@ export const StudentDashBoard: React.FC = () => {
           <InputBase
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by Test name, Date, Batch ..."
+            placeholder="Search by Test name, Date..."
             sx={{
               flex: 1,
-              fontSize: "13px",
+              fontSize: "13.5px",
               color: "#101828",
               "& input::placeholder": {
                 color: "#98a2b3",
@@ -330,92 +452,99 @@ export const StudentDashBoard: React.FC = () => {
               },
             }}
           />
+          {searchQuery && (
+            <IconButton
+              size="small"
+              onClick={() => setSearchQuery("")}
+              sx={{ p: 0.25 }}
+            >
+              <CloseIcon fontSize="small" sx={{ color: "#98a2b3" }} />
+            </IconButton>
+          )}
         </Box>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <Box
-            onClick={() => setStatusFilter((prev) => (prev === "Live" ? "All" : "Live"))}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 1.75,
-              py: 0.65,
-              borderRadius: "20px",
-              bgcolor: "#ecfdf3",
-              border: statusFilter === "Live" ? "1.5px solid #16a34a" : "1px solid #d1fae5",
-              color: "#16a34a",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: 600,
-              userSelect: "none",
-              transition: "all 0.15s ease",
-              "&:hover": { bgcolor: "#e0fbe9" },
-            }}
-          >
-            <Box
-              sx={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                bgcolor: "#16a34a",
-              }}
-            />
-            <span>Live</span>
-            <Typography
-              component="span"
-              sx={{
-                fontSize: "13px",
-                fontWeight: 700,
-                color: "#16a34a",
-                ml: 0.5,
-              }}
-            >
-              {summary?.liveCount ?? 0}
-            </Typography>
-          </Box>
-
-          <Box
-            onClick={() => setStatusFilter((prev) => (prev === "Upcoming" ? "All" : "Upcoming"))}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 1.75,
-              py: 0.65,
-              borderRadius: "20px",
-              bgcolor: "#fff7ed",
-              border: statusFilter === "Upcoming" ? "1.5px solid #ea580c" : "1px solid #ffedd5",
-              color: "#ea580c",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: 600,
-              userSelect: "none",
-              transition: "all 0.15s ease",
-              "&:hover": { bgcolor: "#ffedd5" },
-            }}
-          >
-            <Box
-              sx={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                bgcolor: "#ea580c",
-              }}
-            />
-            <span>Upcoming</span>
-            <Typography
-              component="span"
-              sx={{
-                fontSize: "13px",
-                fontWeight: 700,
-                color: "#ea580c",
-                ml: 0.5,
-              }}
-            >
-              {summary?.upcomingCount ?? 0}
-            </Typography>
-          </Box>
+        <Box
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 0.5,
+            p: "4px",
+            borderRadius: "8px",
+            border: "1px solid #e4e7ec",
+            bgcolor: "#ffffff",
+            boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+          }}
+        >
+          {[
+            {
+              id: "All" as const,
+              label: "All",
+              count: summary?.totalTests ?? tasksList.length,
+            },
+            {
+              id: "Live" as const,
+              label: "Live",
+              count:
+                summary?.liveCount ??
+                tasksList.filter((t) => (t.status || "").toLowerCase() === "live").length,
+            },
+            {
+              id: "Upcoming" as const,
+              label: "Upcoming",
+              count:
+                summary?.upcomingCount ??
+                tasksList.filter((t) => (t.status || "").toLowerCase() === "upcoming").length,
+            },
+          ].map((tab) => {
+            const isActive = statusFilter === tab.id;
+            return (
+              <Box
+                key={tab.id}
+                onClick={() => setStatusFilter(tab.id)}
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0.85,
+                  px: 1.75,
+                  py: 0.55,
+                  borderRadius: "6px",
+                  bgcolor: isActive ? "#eff8ff" : "transparent",
+                  color: isActive ? "#175cd3" : "#475467",
+                  fontWeight: isActive ? 600 : 500,
+                  fontSize: "13.5px",
+                  cursor: "pointer",
+                  userSelect: "none",
+                  transition: "all 0.15s ease",
+                  "&:hover": {
+                    bgcolor: isActive ? "#eff8ff" : "#f8fafc",
+                    color: isActive ? "#175cd3" : "#1d2939",
+                  },
+                }}
+              >
+                <span>{tab.label}</span>
+                <Box
+                  component="span"
+                  sx={{
+                    minWidth: 20,
+                    height: 20,
+                    px: 0.6,
+                    borderRadius: "10px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "11.5px",
+                    fontWeight: 700,
+                    bgcolor: isActive ? "#1570ef" : "#f2f4f7",
+                    color: isActive ? "#ffffff" : "#475467",
+                    lineHeight: 1,
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {tab.count}
+                </Box>
+              </Box>
+            );
+          })}
         </Box>
       </Box>
 
@@ -622,10 +751,13 @@ export const StudentDashBoard: React.FC = () => {
                     <Button
                       variant="contained"
                       size="small"
-                      disabled={!task.canStart}
+                      disabled={!task.canStart || Boolean(task.attended) || task.status === "Completed"}
                       onClick={() => handleStartTest(task)}
                       sx={{
-                        bgcolor: task.canStart ? "#2563eb" : "#94a3b8 !important",
+                        bgcolor:
+                          task.canStart && !task.attended && task.status !== "Completed"
+                            ? "#2563eb"
+                            : "#94a3b8 !important",
                         color: "#ffffff !important",
                         textTransform: "none",
                         fontWeight: 600,
@@ -635,7 +767,10 @@ export const StudentDashBoard: React.FC = () => {
                         py: 0.6,
                         boxShadow: "none",
                         "&:hover": {
-                          bgcolor: task.canStart ? "#1d4ed8" : "#94a3b8",
+                          bgcolor:
+                            task.canStart && !task.attended && task.status !== "Completed"
+                              ? "#1d4ed8"
+                              : "#94a3b8",
                         },
                       }}
                     >
@@ -661,90 +796,300 @@ export const StudentDashBoard: React.FC = () => {
         )}
       </Box>
 
-      <Dialog
+      <MuiDialog
         open={Boolean(selectedTaskDetails)}
         onClose={() => setSelectedTaskDetails(null)}
-        title={selectedTaskDetails?.title || "Test Details"}
         maxWidth="sm"
-        showCloseButton
-        actions={
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <Button
-              variant="outlined"
-              onClick={() => setSelectedTaskDetails(null)}
-              sx={{ textTransform: "none", color: "#667085" }}
-            >
-              Close
-            </Button>
-            {selectedTaskDetails?.canStart && (
-              <Button
-                variant="contained"
-                onClick={() => {
-                  if (selectedTaskDetails) handleStartTest(selectedTaskDetails);
-                  setSelectedTaskDetails(null);
-                }}
-                sx={{
-                  bgcolor: "#2563eb",
-                  "&:hover": { bgcolor: "#1d4ed8" },
-                  textTransform: "none",
-                }}
-              >
-                Start Assessment
-              </Button>
-            )}
-          </Box>
-        }
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "16px",
+            maxWidth: 550,
+            bgcolor: "#ffffff",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.15)",
+            p: 0,
+          },
+        }}
       >
         {selectedTaskDetails && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Chip
-                label={selectedTaskDetails.status}
-                size="small"
-                sx={{
-                  bgcolor: selectedTaskDetails.status === "Live" ? "#ecfdf3" : "#fff7ed",
-                  color: selectedTaskDetails.status === "Live" ? "#16a34a" : "#ea580c",
-                  fontWeight: 600,
-                  fontSize: 12,
-                }}
-              />
-              <Chip
-                label={`Duration: ${selectedTaskDetails.durationMinutes} mins`}
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: 12 }}
-              />
-              {selectedTaskDetails.totalQuestions && (
-                <Chip
-                  label={`Questions: ${selectedTaskDetails.totalQuestions}`}
-                  size="small"
-                  variant="outlined"
-                  sx={{ fontSize: 12 }}
-                />
-              )}
-            </Box>
-
+          <Box
+            sx={{
+              p: { xs: 3, sm: 4 },
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {/* Header: Title and Close button */}
             <Box
               sx={{
-                bgcolor: "#f9fafb",
-                p: 2,
-                borderRadius: "8px",
-                border: "1px solid #eaecf0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                mb: 2.25,
               }}
             >
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#101828", mb: 0.5 }}>
-                Schedule & Format:
+              <Typography
+                component="h2"
+                sx={{
+                  fontSize: { xs: "20px", sm: "22px" },
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  lineHeight: 1.3,
+                  pr: 1,
+                }}
+              >
+                {dialogTitle}
               </Typography>
-              <Typography sx={{ fontSize: "13px", color: "#475467" }}>
-                • Time Slot: {selectedTaskDetails.timeDisplay}
-              </Typography>
-              <Typography sx={{ fontSize: "13px", color: "#475467" }}>
-                • Categories: {selectedTaskDetails.categories || selectedTaskDetails.categoryList?.join(" . ")}
-              </Typography>
+              <IconButton
+                onClick={() => setSelectedTaskDetails(null)}
+                size="small"
+                sx={{
+                  color: "#2563eb",
+                  p: 0.75,
+                  ml: 1,
+                  "&:hover": { bgcolor: "rgba(37, 99, 235, 0.08)" },
+                }}
+              >
+                <CloseIcon sx={{ fontSize: 22 }} />
+              </IconButton>
+            </Box>
+
+            {/* Badges Row */}
+            <Box
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 1.25,
+                mb: 2.5,
+              }}
+            >
+              {/* Status Badge */}
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  border: `1.5px solid ${isLive
+                      ? "#86efac"
+                      : isCompleted
+                        ? "#cbd5e1"
+                        : isUpcoming
+                          ? "#fdba74"
+                          : "#cbd5e1"
+                    }`,
+                  bgcolor: isLive
+                    ? "#f0fdf4"
+                    : isCompleted
+                      ? "#ffffff"
+                      : isUpcoming
+                        ? "#fff7ed"
+                        : "#f8fafc",
+                  borderRadius: "6px",
+                  px: 1.75,
+                  py: 0.55,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    bgcolor: isLive
+                      ? "#22c55e"
+                      : isCompleted
+                        ? "#64748b"
+                        : isUpcoming
+                          ? "#ea580c"
+                          : "#64748b",
+                    boxShadow: isLive ? "0 0 6px rgba(34, 197, 94, 0.6)" : "none",
+                    mr: 0.8,
+                  }}
+                />
+                <Typography
+                  sx={{
+                    color: isLive
+                      ? "#16a34a"
+                      : isCompleted
+                        ? "#475467"
+                        : isUpcoming
+                          ? "#ea580c"
+                          : "#475467",
+                    fontWeight: 600,
+                    fontSize: "14px",
+                  }}
+                >
+                  {isCompleted
+                    ? "Completed"
+                    : isLive
+                      ? "Live"
+                      : (rawStatus || "Upcoming")}
+                </Typography>
+              </Box>
+
+              {/* Duration Badge */}
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  border: "1px solid #cbd5e1",
+                  bgcolor: "#ffffff",
+                  borderRadius: "6px",
+                  px: 1.75,
+                  py: 0.55,
+                }}
+              >
+                <Typography sx={{ color: "#475467", fontSize: "14px", fontWeight: 500 }}>
+                  {`Duration: ${dialogDuration} min`}
+                </Typography>
+              </Box>
+
+              {/* Question Badge */}
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  border: "1px solid #cbd5e1",
+                  bgcolor: "#ffffff",
+                  borderRadius: "6px",
+                  px: 1.75,
+                  py: 0.55,
+                }}
+              >
+                <Typography sx={{ color: "#475467", fontSize: "14px", fontWeight: 500 }}>
+                  {`Question: ${dialogQuestions}`}
+                </Typography>
+              </Box>
+
+              {/* Mark Badge */}
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  border: "1px solid #cbd5e1",
+                  bgcolor: "#ffffff",
+                  borderRadius: "6px",
+                  px: 1.75,
+                  py: 0.55,
+                }}
+              >
+                <Typography sx={{ color: "#475467", fontSize: "14px", fontWeight: 500 }}>
+                  {`Mark: ${dialogMarks}`}
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* Information Container (Grey Box) */}
+            <Box
+              sx={{
+                bgcolor: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                p: { xs: "20px 18px", sm: "22px 24px" },
+                display: "flex",
+                flexDirection: "column",
+                gap: 1.5,
+              }}
+            >
+              {[
+                { label: "Categories:", value: dialogCategories },
+                { label: "Date & Time:", value: dialogDateTime },
+                { label: "Total Attempt:", value: dialogTotalAttempt },
+                { label: "Pass Count:", value: dialogPassCount },
+                { label: "Fail Count:", value: dialogFailCount },
+                { label: "Assigned by:", value: dialogAssignedBy },
+              ].map((row, rIdx) => (
+                <Box key={rIdx} sx={{ display: "flex", alignItems: "baseline" }}>
+                  <Typography
+                    sx={{
+                      width: 130,
+                      minWidth: 130,
+                      fontSize: "15px",
+                      fontWeight: 600,
+                      color: "#0f172a",
+                    }}
+                  >
+                    {row.label}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: "15px",
+                      fontWeight: 400,
+                      color: "#0f172a",
+                      ml: 1,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {row.value}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+
+            {/* Action Buttons */}
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 2,
+                mt: 3.5,
+              }}
+            >
+              <Button
+                variant="outlined"
+                onClick={() => setSelectedTaskDetails(null)}
+                sx={{
+                  border: "1.5px solid #0f172a !important",
+                  bgcolor: "#ffffff !important",
+                  color: "#0f172a !important",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "15px",
+                  borderRadius: "8px",
+                  px: 3.5,
+                  py: 0.85,
+                  minWidth: 100,
+                  boxShadow: "none",
+                  "&:hover": {
+                    bgcolor: "#f8fafc !important",
+                    border: "1.5px solid #0f172a !important",
+                  },
+                }}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                variant="contained"
+                disabled={isStartDisabled}
+                onClick={() => {
+                  if (selectedTaskDetails && !isStartDisabled) {
+                    handleStartTest(selectedTaskDetails);
+                    setSelectedTaskDetails(null);
+                  }
+                }}
+                sx={{
+                  bgcolor: isStartDisabled ? "#94a3b8 !important" : "#2563eb !important",
+                  color: "#ffffff !important",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "15px",
+                  borderRadius: "8px",
+                  px: 4,
+                  py: 0.85,
+                  minWidth: 100,
+                  boxShadow: "none",
+                  cursor: isStartDisabled ? "not-allowed !important" : "pointer",
+                  "&:hover": {
+                    bgcolor: isStartDisabled ? "#94a3b8 !important" : "#1d4ed8 !important",
+                  },
+                }}
+              >
+                Start
+              </Button>
             </Box>
           </Box>
         )}
-      </Dialog>
+      </MuiDialog>
 
       <Snackbar
         open={snackbar.open}

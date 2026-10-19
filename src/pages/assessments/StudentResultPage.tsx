@@ -232,7 +232,7 @@ export const StudentResultPage: React.FC = () => {
             }}
           >
             <MenuItem value="All Type">All Type</MenuItem>
-            <MenuItem value="MCQ">MCQ</MenuItem>
+            <MenuItem value="MCQ">Objective</MenuItem>
             <MenuItem value="LSRW">LSRW</MenuItem>
             <MenuItem value="Coding">Coding</MenuItem>
           </Select>
@@ -439,7 +439,7 @@ export const StudentResultPage: React.FC = () => {
                       mt: 0.5,
                     }}
                   >
-                    {item.categories || item.categoryList?.join(" . ") || "MCQ . LSRW . Coding"}
+                    {(item.categories || item.categoryList?.join(" · ") || "Objective · LSRW · Coding").replace(/\bMCQ\b/gi, "Objective")}
                   </Typography>
 
                   <Typography

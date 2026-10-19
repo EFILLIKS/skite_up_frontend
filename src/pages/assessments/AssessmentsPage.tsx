@@ -39,7 +39,7 @@ export const AssessmentsPage: React.FC = () => {
           Assessments
         </Typography>
         <Typography variant="body2" sx={{ color: "#667085", mt: 0.5, fontSize: "13.5px" }}>
-          Active assessments currently assigned to students across MCQ, LSRW, Cognitive games and Coding.
+          Active assessments currently assigned to students across Objective, LSRW, Cognitive games and Coding.
         </Typography>
       </Box>
 
